@@ -251,6 +251,31 @@
   .keypop .st{margin-top:7px;font-size:11px;line-height:1.45}
   .keypop .st.ok{color:#04693b} .keypop .st.no{color:var(--muted)}
   @media (max-width:640px){ .keypop{right:14px;top:64px;width:calc(100vw - 28px)} }
+  /* ET-EDIT: Toast —— 通用浮動通知（右下堆疊、由右滑入、不擋操作）
+     第一個使用者：版本更新提示。其他通知可直接沿用 .toast 這個結構。 */
+  .toasts{position:fixed;right:18px;bottom:18px;z-index:1100;display:flex;
+    flex-direction:column;gap:9px;align-items:flex-end;
+    max-width:min(358px,calc(100vw - 28px));pointer-events:none}
+  .toast{pointer-events:auto;display:flex;gap:11px;align-items:flex-start;width:100%;
+    box-sizing:border-box;padding:11px 12px 11px 13px;border-radius:14px;
+    background:#fff;color:var(--ink);border:1px solid rgba(15,30,50,.08);
+    box-shadow:0 14px 36px rgba(10,25,45,.20),0 2px 6px rgba(10,25,45,.09);
+    font-size:12.5px;line-height:1.5;
+    transform:translateX(120%);opacity:0;
+    transition:transform .3s cubic-bezier(.2,.85,.25,1),opacity .3s ease}
+  .toast.show{transform:translateX(0);opacity:1}
+  .toast .ic2{flex:none;font-size:15px;line-height:1.25}
+  .toast .tl{flex:1;min-width:0}
+  .toast .tt{font-weight:700;font-size:13px}
+  .toast .tb{color:var(--muted);margin-top:1px}
+  .toast .ta{display:flex;gap:7px;margin-top:9px}
+  .toast .ta button{border:0;cursor:pointer;font:inherit;font-size:12px;font-weight:600;
+    padding:6px 13px;border-radius:9px;background:var(--accent);color:#fff}
+  .toast .ta button.ghost{background:rgba(15,30,50,.07);color:var(--ink-2);font-weight:500}
+  .toast .x{flex:none;border:0;background:none;cursor:pointer;color:var(--muted-2);
+    font-size:15px;line-height:1;padding:1px 3px;border-radius:6px}
+  .toast .x:hover{color:var(--ink);background:rgba(15,30,50,.06)}
+  @media (max-width:640px){ .toasts{right:14px;bottom:14px;left:14px;max-width:none} }
 
   .mobile-handle{display:none}
 
@@ -352,6 +377,9 @@
 
   <!-- ET-EDIT: 管線健康示警橫幅（讀 data/pipeline_health.json；無檔案或正常時隱藏） -->
   <div class="warnbar" id="warnbar" role="status" hidden></div>
+
+  <!-- ET-EDIT: Toast 容器（通用浮動通知；目前用於版本更新提示） -->
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
   <div class="controls">
     <div class="search" id="searchWrap">
@@ -509,6 +537,7 @@ function boot(feed, cfg, health){
   JLC.total = (feed.cameras || []).length;
   buildMap(cfg);
   bindKeyPop();                     // ET-EDIT: 自備 CARTO 金鑰（需 buildMap 之後，map 已存在）
+  setupVersionWatch();              // ET-EDIT: 資料／前端更新 → Toast 提示重新整理
   buildStats(feed);
   buildFreshness(feed, health);     // ET-EDIT
   buildHealthBar(health);           // ET-EDIT
@@ -642,6 +671,125 @@ function bindKeyPop(){
   });
   document.addEventListener('keydown', e => {
     if(e.key === 'Escape') pop.classList.remove('show');
+  });
+}
+
+/* ET-EDIT ── Toast（通用浮動通知）─────────────────────────
+   右下堆疊、由右滑入、不擋操作。第一個使用者是版本更新提示。
+   用 DOM API 組（不用 innerHTML 拼字串）—— 通知文字可能來自資料檔，
+   拼字串等於把 XSS 的門打開。 */
+function toast(opt){
+  const box = $('#toasts');
+  if(!box) return null;
+  const o = opt || {};
+  if(o.key && box.querySelector('[data-toast-key="' + o.key + '"]')) return null;  // 同 key 不重複堆
+
+  const el = document.createElement('div');
+  el.className = 'toast';
+  if(o.key) el.dataset.toastKey = o.key;
+
+  const ic = document.createElement('span');
+  ic.className = 'ic2';
+  ic.textContent = o.icon || '🔔';
+
+  const tl = document.createElement('div');
+  tl.className = 'tl';
+  const tt = document.createElement('div');
+  tt.className = 'tt';
+  tt.textContent = o.title || '';
+  tl.appendChild(tt);
+  if(o.body){
+    const b = document.createElement('div');
+    b.className = 'tb';
+    b.textContent = o.body;
+    tl.appendChild(b);
+  }
+  if(o.actions && o.actions.length){
+    const ta = document.createElement('div');
+    ta.className = 'ta';
+    o.actions.forEach(a => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = a.label;
+      if(a.ghost) btn.className = 'ghost';
+      btn.addEventListener('click', () => { (a.onClick || (() => closeToast(el)))(el); });
+      ta.appendChild(btn);
+    });
+    tl.appendChild(ta);
+  }
+
+  const x = document.createElement('button');
+  x.type = 'button';
+  x.className = 'x';
+  x.setAttribute('aria-label', '關閉');
+  x.textContent = '✕';
+  x.addEventListener('click', () => closeToast(el));
+
+  el.append(ic, tl, x);
+  box.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));   // 進場動畫需要先有一幀
+  return el;
+}
+
+function closeToast(el){
+  if(!el || !el.parentNode) return;
+  el.classList.remove('show');
+  setTimeout(() => el.remove(), 320);
+}
+
+/* ET-EDIT ── 版本更新提示 ──────────────────────────────────
+   為什麼需要：這是「開著一直看」的看板型頁面。資料每 6 小時更新、前端也會改版，
+   開著舊頁面的人不會知道 —— 會以為「怎麼都沒變」。
+
+   ⚠️ 用 HEAD 讀 ETag / Last-Modified 判斷，**不下載整包**（cameras.json 2.8 MB）。
+   ⚠️ 只在分頁可見時檢查（visibilitychange + 定時）—— 沒在看就不查，
+      省自己的流量也省對方的頻寬。
+   ⚠️「稍後」要把該版本記住，否則每輪又跳一次，變成騷擾。 */
+const UPD_POLL_MS = 5 * 60 * 1000;
+const UPD_TARGETS = { data: 'data/cameras.json', html: 'index.html' };
+
+function headStamp(url){
+  return fetch(url, {method:'HEAD', cache:'no-store'})
+    .then(r => r.ok ? (r.headers.get('etag') || r.headers.get('last-modified')) : null)
+    .catch(() => null);
+}
+
+function setupVersionWatch(){
+  if(!window.fetch || !$('#toasts')) return;
+  const base = {};
+  let dismissed = '';
+
+  function tick(){
+    if(document.hidden) return;                        // 沒在看就不查
+    Promise.all(Object.entries(UPD_TARGETS).map(([k, url]) =>
+      headStamp(url).then(s => [k, s]))).then(pairs => {
+      let sig = '';
+      const changed = [];
+      for(const [k, s] of pairs){
+        sig += k + ':' + s + ';';
+        if(base[k] && s && s !== base[k]) changed.push(k);
+      }
+      if(!changed.length || sig === dismissed) return;
+      toast({
+        key: 'update',                                  // 同一次更新只跳一張
+        icon: '🔄',
+        title: changed.indexOf('html') >= 0 ? '前端已更新' : '資料已更新',
+        body: '重新整理以載入最新版本。',
+        actions: [
+          {label: '重新整理', onClick: () => location.reload()},
+          {label: '稍後', ghost: true, onClick: (el) => {
+            dismissed = sig; closeToast(el);
+          }},
+        ],
+      });
+    });
+  }
+
+  Promise.all(Object.entries(UPD_TARGETS).map(([k, url]) =>
+    headStamp(url).then(s => { base[k] = s; }))).then(() => {
+    if(!base.data && !base.html) return;               // 伺服器沒給 ETag/Last-Modified → 不啟用
+    setInterval(tick, UPD_POLL_MS);
+    document.addEventListener('visibilitychange', () => { if(!document.hidden) tick(); });
   });
 }
 
