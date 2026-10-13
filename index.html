@@ -5,6 +5,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>日本即時影像地圖 · Japan Live Cams</title>
 <meta name="description" content="以地圖探索日本各地的公開即時影像直播：觀光名所、海岸美景、山岳、交通設施。">
+<!-- ET-EDIT: 反快取。⚠️ 誠實說：這幾行對「文件本身」的效果有限，
+     現代瀏覽器多半以 HTTP 標頭為準。真正可靠的是兩件事：
+       ① 本機 server（scripts/serve.py）送 Cache-Control: no-cache, must-revalidate
+       ② 「重新整理」鈕走帶 cache-buster 的網址（見 reloadFresh()）—— 這招一定有效
+     留著這幾行是因為公開站（GitHub Pages）沒法設標頭，聊勝於無。 -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
@@ -522,10 +530,14 @@ const LIVE_RANK  = { live:0, unknown:1, offline:2 };
 
 /* ── 啟動 ─────────────────────────────────────────────── */
 Promise.all([
-  fetch('data/cameras.json', {cache:'no-store'}).then(r => { if(!r.ok) throw new Error('cameras.json '+r.status); return r.json(); }),
-  fetch('data/mapconfig.json', {cache:'no-store'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  // ET-EDIT: 資料一律走 no-cache（＝每次都先問伺服器，沒變就 304 不重傳）。
+  //   ⚠️ 不用 no-store：那會變成每次重新下載 2.8MB。
+  //   ⚠️ 不用預設值：公開站（GitHub Pages）回 max-age=600，10 分鐘內連問都不問 → 看到舊資料。
+  //   兩邊實測都支援 304（0 bytes）→ no-cache 是新鮮與省流量兼得。
+  fetch('data/cameras.json', {cache:'no-cache'}).then(r => { if(!r.ok) throw new Error('cameras.json '+r.status); return r.json(); }),
+  fetch('data/mapconfig.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   // ET-EDIT: 管線健康狀態。**可選檔** —— 不存在（例如公開發佈包）時只是不顯示示警橫幅，不影響其他功能。
-  fetch('data/pipeline_health.json', {cache:'no-store'}).then(r => r.ok ? r.json() : null).catch(() => null)
+  fetch('data/pipeline_health.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null)
 ]).then(([feed, cfg, health]) => { JLC.data = feed; JLC.mapconfig = cfg; JLC.health = health; boot(feed, cfg, health); })
   .catch(err => {
     console.error('無法載入資料', err);
@@ -535,6 +547,7 @@ Promise.all([
 
 function boot(feed, cfg, health){
   JLC.total = (feed.cameras || []).length;
+  stripBust();                      // ET-EDIT: 把 reloadFresh() 的時間戳從網址列拿掉
   buildMap(cfg);
   bindKeyPop();                     // ET-EDIT: 自備 CARTO 金鑰（需 buildMap 之後，map 已存在）
   setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
@@ -737,6 +750,28 @@ function closeToast(el){
   setTimeout(() => el.remove(), 320);
 }
 
+/* ET-EDIT ── 「一定拿到新檔」的重新整理 ────────────────────────
+   為什麼不直接用 location.reload()：
+   公開站（GitHub Pages）對 index.html 回 `Cache-Control: max-age=600`，
+   瀏覽器 10 分鐘內**直接用快取、連問都不問**，reload() 不保證繞過它。
+
+   → 換一個**沒被快取過的網址**（帶時間戳）就一定拿得到新檔。
+     這招不依賴任何標頭，兩邊（本機／Pages）都有效。
+
+   ⚠️ 載入後要把時間戳從網址列拿掉，否則會留在書籤與分享連結裡。 */
+function reloadFresh(){
+  const u = new URL(location.href);
+  u.searchParams.set('_', Date.now());
+  location.replace(u.toString());
+}
+
+function stripBust(){
+  const u = new URL(location.href);
+  if(!u.searchParams.has('_')) return;
+  u.searchParams.delete('_');
+  history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
+}
+
 /* ET-EDIT ── 更新監看（兩種通知）────────────────────────────
    ① 資料／前端更新  → Toast「重新整理」
    ② 後端（server）更新 → Toast「需重啟 server」
@@ -783,7 +818,7 @@ function setupUpdateWatch(){
         title: changed.indexOf('html') >= 0 ? '前端已更新' : '資料已更新',
         body: '重新整理以載入最新版本。',
         actions: [
-          {label: '重新整理', onClick: () => location.reload()},
+          {label: '重新整理', onClick: () => reloadFresh()},
           {label: '稍後', ghost: true, onClick: (el) => {
             dismissed = sig; closeToast(el);
           }},
@@ -958,7 +993,7 @@ function buildStats(feed){
      source   — 外部來源（改版／下線）
      pipeline — 排程健康（中斷／逾時／資料過期） */
 function buildAlerts(){
-  fetch('data/alerts.json', {cache:'no-store'}).then(r => r.ok ? r.json() : null)
+  fetch('data/alerts.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null)
     .then(a => {
       if(!a || !a.items || !a.items.length) return;
       const warn = a.items.filter(i => i.severity === 'warn');
