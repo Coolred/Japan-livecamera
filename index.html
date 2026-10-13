@@ -537,7 +537,7 @@ function boot(feed, cfg, health){
   JLC.total = (feed.cameras || []).length;
   buildMap(cfg);
   bindKeyPop();                     // ET-EDIT: 自備 CARTO 金鑰（需 buildMap 之後，map 已存在）
-  setupVersionWatch();              // ET-EDIT: 資料／前端更新 → Toast 提示重新整理
+  setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
   buildStats(feed);
   buildFreshness(feed, health);     // ET-EDIT
   buildHealthBar(health);           // ET-EDIT
@@ -737,13 +737,19 @@ function closeToast(el){
   setTimeout(() => el.remove(), 320);
 }
 
-/* ET-EDIT ── 版本更新提示 ──────────────────────────────────
-   為什麼需要：這是「開著一直看」的看板型頁面。資料每 6 小時更新、前端也會改版，
-   開著舊頁面的人不會知道 —— 會以為「怎麼都沒變」。
+/* ET-EDIT ── 更新監看（兩種通知）────────────────────────────
+   ① 資料／前端更新  → Toast「重新整理」
+   ② 後端（server）更新 → Toast「需重啟 server」
 
-   ⚠️ 用 HEAD 讀 ETag / Last-Modified 判斷，**不下載整包**（cameras.json 2.8 MB）。
+   為什麼需要：這是「開著一直看」的看板。資料每 6 小時更新、程式也會改，
+   開著舊頁面的人不會知道 —— 會以為「怎麼都沒變」或「怎麼改了沒生效」。
+
+   ⚠️ ① 用 HEAD 讀 ETag / Last-Modified 判斷，**不下載整包**（cameras.json 2.8 MB）。
+   ⚠️ ② **前端無法自己判斷後端新舊** —— 跑在記憶體裡的舊版只會說自己是新版。
+         所以由**執行中的伺服器**讀磁碟比對（scripts/serve.py 的 /__rev）。
    ⚠️ 只在分頁可見時檢查（visibilitychange + 定時）—— 沒在看就不查，
       省自己的流量也省對方的頻寬。
+   ⚠️ 公開站（GitHub Pages）沒有 /__rev → 404 要安靜略過，不能報錯。
    ⚠️「稍後」要把該版本記住，否則每輪又跳一次，變成騷擾。 */
 const UPD_POLL_MS = 5 * 60 * 1000;
 const UPD_TARGETS = { data: 'data/cameras.json', html: 'index.html' };
@@ -754,13 +760,14 @@ function headStamp(url){
     .catch(() => null);
 }
 
-function setupVersionWatch(){
+function setupUpdateWatch(){
   if(!window.fetch || !$('#toasts')) return;
   const base = {};
   let dismissed = '';
+  let backendStale = false;
 
-  function tick(){
-    if(document.hidden) return;                        // 沒在看就不查
+  // ① 資料／前端
+  function tickContent(){
     Promise.all(Object.entries(UPD_TARGETS).map(([k, url]) =>
       headStamp(url).then(s => [k, s]))).then(pairs => {
       let sig = '';
@@ -785,11 +792,39 @@ function setupVersionWatch(){
     });
   }
 
+  // ② 後端（本機 server）
+  function tickBackend(){
+    fetch('/__rev', {cache:'no-store'})
+      .then(r => r.ok ? r.json() : null)
+      .catch(() => null)
+      .then(j => {
+        if(!j || typeof j.stale !== 'boolean') return;   // 沒有這個端點（公開站）→ 略過
+        if(j.stale && !backendStale){
+          backendStale = true;
+          toast({
+            key: 'backend',
+            icon: '🛠️',
+            title: '後端程式已更新',
+            body: '需重啟 server 才會生效（磁碟 ' + j.disk_rev
+                  + ' ≠ 執行中 ' + j.running_rev + '）。',
+          });
+        }
+        if(!j.stale) backendStale = false;               // 重啟後恢復，下次還會再提醒
+      });
+  }
+
+  function tick(){
+    if(document.hidden) return;                          // 沒在看就不查
+    tickContent();
+    tickBackend();
+  }
+
   Promise.all(Object.entries(UPD_TARGETS).map(([k, url]) =>
     headStamp(url).then(s => { base[k] = s; }))).then(() => {
-    if(!base.data && !base.html) return;               // 伺服器沒給 ETag/Last-Modified → 不啟用
     setInterval(tick, UPD_POLL_MS);
     document.addEventListener('visibilitychange', () => { if(!document.hidden) tick(); });
+    if(base.data || base.html) return;                   // 有 ETag 就等定時查
+    tick();                                              // 沒有也先查一次後端
   });
 }
 
