@@ -80,6 +80,10 @@
     background:rgba(247,144,9,.10);border:1px solid rgba(247,144,9,.35);color:#7a3d00;
     display:flex;gap:8px;align-items:flex-start}
   .warnbar.error{background:rgba(240,68,56,.10);border-color:rgba(240,68,56,.35);color:#912018}
+  /* ⚠️ 一定要自己補：.warnbar 用了 display:flex，會蓋掉瀏覽器預設的
+     [hidden]{display:none} —— 少了這行，即使 HTML 標了 hidden，
+     空的示警條還是會一直佔位（本專案第五次踩這個坑）。 */
+  .warnbar[hidden]{display:none}
   .warnbar .ic{flex:none;font-size:13px;line-height:1.4}
   .warnbar .tx{flex:1;min-width:0}
   .warnbar b{font-weight:700}
@@ -453,9 +457,14 @@
          ⚠️ 為什麼要抬：iOS 的 Arc Search 等 App 有自己的底部工具列覆蓋在網頁上，
             貼底元素會被蓋住 → 看得到、點不到。 */
       bottom:calc(var(--bh, 0px) + env(safe-area-inset-bottom, 0px));
-      /* ET-EDIT: 原本 74vh 太高（使用者回報「過大」）→ 降到 58%。
-         並用「實測可視高度」而非 vh（各家定義不一致）。 */
-      max-height:58vh; max-height:calc(var(--vh, 100vh) * .58); transition:max-height .25s ease
+      /* ET-EDIT: 手機面板高度。
+         本來 74vh「過大」→ 降到 58%，但實機回報「下方空間不夠，只能看到一項資料的 2/3」——
+         因為抽屜的固定區塊（把手＋head＋controls＋foot）就吃掉 ~386px，
+         58% 只剩 76px 給列表。
+         解法是【兩邊下手】：①固定區塊瘦身（見下方 .head/.controls 規則）
+         ②上限提到 76% —— 開場已經會自動收合（不像當初 74vh 那時一開站就蓋住地圖），
+         展開時使用者本來就是要看清單，所以放大是對的。 */
+      max-height:58vh; max-height:calc(var(--vh, 100vh) * .76); transition:max-height .25s ease
     }
     /* 收合：以 max-height 裁切（不用 transform — backdrop-filter 會使 transform 失效）*/
     .panel.collapsed{max-height:56px}
@@ -466,8 +475,19 @@
     .panel.collapsed .psheetclose{display:none}
     .mobile-handle{display:block;padding:10px 0 6px;cursor:pointer;text-align:center}
     .mobile-handle i{display:inline-block;width:40px;height:4px;border-radius:3px;background:rgba(15,30,50,.22)}
-    .head{padding:4px 16px 12px}
-    .foot{padding-bottom:9px}
+    .head{padding:2px 14px 9px}
+    /* ET-EDIT: 手機 head 瘦身 —— 固定區塊每省 1px，列表就多 1px。
+       ① 隱藏 logo 與副標（手機上沒資訊價值，卻吃掉 ~44px）
+       ② 統計 chips 改【單行橫向捲動】而不是換行（省 ~56px；換行會變兩列）
+       ⚠️ 不要直接 display:none 掉 .stats —— 那排數字（共幾台／直播中／未播）
+          是使用者判斷資料健康的方式，縮成一行仍要看得見。 */
+    .brand .mark, .brand .sub{display:none}
+    .stats{flex-wrap:nowrap;overflow-x:auto;margin-top:6px;scrollbar-width:none;
+      -webkit-overflow-scrolling:touch}
+    .stats::-webkit-scrollbar{display:none}
+    .controls{padding:8px 14px;gap:7px}
+    .listwrap{min-height:118px}
+    .foot{padding-bottom:7px}
     .tools{top:14px;right:14px}
     /* ET-EDIT: 「回到全日本」在手機改到【右上、工具列下方】——
        ① 原本放右下，會壓到 Leaflet 的縮放鈕（zoomControl 也是 bottomright）
@@ -1036,6 +1056,19 @@ function buildDebugLog(){
   L.push(`rect                ${r(panel)}`);
   L.push(`computed            max-height=${cs(panel,'max-height')} display=${cs(panel,'display')} bottom=${cs(panel,'bottom')}`);
   L.push(`panelClose 顯示      ${cs($('#panelClose'),'display')}`);
+  // 手機最容易出問題的地方：固定區塊（把手/head/controls/foot）把高度吃光，
+  // 列表只剩一格。量出列表實際高度才知道有沒有「空間不夠」。
+  const lw = $('#list');
+  const lwH = lw ? Math.round(lw.getBoundingClientRect().height) : 0;
+  L.push(`列表區高度           ${lwH}px${lwH ? `（約 ${(lwH / 76).toFixed(1)} 列，單列約 76px）` : ''}`);
+  L.push(`  head/controls/foot  ${['.head', '.controls', '.foot'].map(s => { const e = $(s); return e ? Math.round(e.getBoundingClientRect().height) : 0; }).join(' / ')} px`);
+  // 逐個子區塊量 —— 面板高度對不上時，這裡一眼看出是哪一塊偷偷佔位
+  // （例如 hidden 的元素被自訂 display 蓋掉，空的還是佔高度）。
+  L.push('  子區塊明細：');
+  if(panel) for(const c of panel.children){
+    const b = c.getBoundingClientRect();
+    L.push(`    ${(c.id || c.className || c.tagName).toString().slice(0, 22).padEnd(23)}h=${String(Math.round(b.height)).padStart(4)}  display=${getComputedStyle(c).display}${c.hidden ? '  [hidden]' : ''}`);
+  }
   L.push(`判定 mobile          ${innerWidth <= 820}（門檻 820）`);
   // iOS 會在「輸入框字級 < 16px」時自動放大整個頁面 —— 量出來才驗得到有沒有踩到
   L.push(`搜尋框字級           ${cs($('#q'),'font-size')}（< 16px 會被 iOS 自動放大）`);
