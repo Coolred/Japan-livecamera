@@ -675,7 +675,10 @@ window.addEventListener('error', e => {
   // ⚠️ 跨網域腳本（CDN）拋的錯，瀏覽器只會給 "Script error." 且位置是 :0:0 ——
   //    看不出所以然。解法是幫 script 標籤加 crossorigin="anonymous"，
   //    讓 CDN 以 CORS 回應、錯誤才有細節（unpkg 有 access-control-allow-origin: *）。
-  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
+  //    若加了仍只拿到 "Script error."，那多半不是我們載入的腳本（見 debug 面板的
+  //    「已載入腳本」區塊 —— 瀏覽器／App 注入的東西會在那裡現形）。
+  const where = e.filename ? `${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}` : '(無檔名 → 跨網域腳本，資訊被瀏覽器遮蔽)';
+  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${where}`);
 }, true);
 window.addEventListener('unhandledrejection', e => {
   JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
@@ -1067,6 +1070,23 @@ function buildDebugLog(){
   L.push('');
   L.push('══ 錯誤 ══');
   L.push(JLC_DBG.errors.length ? JLC_DBG.errors.join('\n') : '(無)');
+
+  // 「Script error. @ :0:0」是瀏覽器對**跨網域腳本**的遮蔽（連 crossorigin 也問不出來時）。
+  // 把頁面上實際載入的腳本全列出來 —— 如果有瀏覽器／App 偷偷注入的東西，這裡會露出來。
+  L.push('');
+  L.push('══ 已載入腳本 ══');
+  for(const s of document.scripts){
+    L.push(`  ${s.src || '(inline)'}${s.crossOrigin ? '  [crossorigin=' + s.crossOrigin + ']' : ''}`);
+  }
+  // 資源計時 API 看得到「實際連線出去的」資源（含被注入的），比 document.scripts 更全。
+  try {
+    const rs = performance.getEntriesByType('resource')
+      .filter(r => r.initiatorType === 'script' || r.initiatorType === 'link')
+      .map(r => `${r.initiatorType}: ${r.name.split('/').slice(0,3).join('/')}${r.name.startsWith(location.origin) ? '（本站）' : '（外部）'}`);
+    L.push(`  實際載入（resource timing）：${rs.length ? '' : '(無)'}`);
+    for(const x of [...new Set(rs)]) L.push(`    ${x}`);
+  } catch(e){ L.push(`  (resource timing 讀不到: ${e.message})`); }
+
   return L.join('\n');
 }
 
