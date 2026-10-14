@@ -340,6 +340,35 @@
   .keypop .warn2{color:#8a4b00;background:rgba(232,166,60,.13);border-radius:8px;
     padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5}
 
+  /* ET-EDIT: 手機版面板的「收合」鈕 —— 光靠頂端那條小把手太不明顯，
+     使用者回報「找不到關閉的方式」。 */
+  .psheetclose{
+    display:none;position:absolute;right:10px;top:10px;z-index:5;
+    width:32px;height:32px;border:0;border-radius:50%;cursor:pointer;
+    background:rgba(15,30,50,.07);color:var(--ink-2);
+    font-size:16px;line-height:1;place-items:center
+    /* ⚠️ 這裡不要寫 display —— 上面 .psheetclose{display:none} 會被蓋掉，
+       桌機也會冒出收合鈕。display 只在手機的 media query 裡設。 */
+  }
+  .psheetclose:hover{background:rgba(15,30,50,.13)}
+
+  /* ET-EDIT: 隱藏 debug 面板（實機問題排查用）
+     開啟方式：① 網址加 ?debug=1   ② 在「資料更新於…」那行連點 5 下 */
+  #dbg{position:fixed;inset:0;z-index:3000;background:rgba(6,12,20,.92);
+    display:flex;align-items:center;justify-content:center;padding:12px}
+  #dbg[hidden]{display:none}
+  .dbgbox{background:#0e1620;color:#cfe3f5;border-radius:12px;width:100%;max-width:620px;
+    max-height:calc(var(--vh, 100vh) - 40px);display:flex;flex-direction:column;overflow:hidden;
+    border:1px solid rgba(120,170,220,.25);font-family:ui-monospace,Menlo,monospace}
+  .dbghd{display:flex;align-items:center;gap:8px;padding:10px 12px;
+    border-bottom:1px solid rgba(120,170,220,.2);font-size:13px}
+  .dbghd b{flex:1;font-family:-apple-system,"Noto Sans TC",sans-serif}
+  .dbghd button{border:0;border-radius:8px;padding:7px 11px;cursor:pointer;font-size:12px;
+    background:rgba(120,170,220,.2);color:#dbeeff;font-family:inherit}
+  .dbghd button.ok{background:#1f7a45;color:#fff}
+  #dbgText{margin:0;padding:12px;overflow:auto;font-size:11px;line-height:1.6;
+    white-space:pre-wrap;word-break:break-all;-webkit-overflow-scrolling:touch;flex:1}
+
   .mobile-handle{display:none}
 
   /* ── 彈出視窗（Popup）──────────────────────────────── */
@@ -406,6 +435,7 @@
 
   /* ── 響應式：手機版底部抽屜 ────────────────────────── */
   @media (max-width:820px){
+    .psheetclose{display:grid}
     .panel{
       left:0;right:0;top:auto;width:auto;max-width:none;border-radius:18px 18px 0 0;
       /* ET-EDIT: 抬到瀏覽器底部工具列之上（--bh，由 JS 用視覺視窗 API 算出）
@@ -413,9 +443,9 @@
          ⚠️ 為什麼要抬：iOS 的 Arc Search 等 App 有自己的底部工具列覆蓋在網頁上，
             貼底元素會被蓋住 → 看得到、點不到。 */
       bottom:calc(var(--bh, 0px) + env(safe-area-inset-bottom, 0px));
-      /* ET-EDIT: max-height 用「實測可視高度」—— vh/dvh 各家定義不一致，
-         在手機上容易比實際可視區高，抽屜就顯得過大並蓋掉下方按鈕。 */
-      max-height:74vh; max-height:calc(var(--vh, 100vh) * .74); transition:max-height .25s ease
+      /* ET-EDIT: 原本 74vh 太高（使用者回報「過大」）→ 降到 58%。
+         並用「實測可視高度」而非 vh（各家定義不一致）。 */
+      max-height:58vh; max-height:calc(var(--vh, 100vh) * .58); transition:max-height .25s ease
     }
     /* 收合：以 max-height 裁切（不用 transform — backdrop-filter 會使 transform 失效）*/
     .panel.collapsed{max-height:56px}
@@ -423,14 +453,28 @@
     .panel.collapsed .controls,
     .panel.collapsed .listwrap,
     .panel.collapsed .foot{display:none}
+    .panel.collapsed .psheetclose{display:none}
     .mobile-handle{display:block;padding:10px 0 6px;cursor:pointer;text-align:center}
     .mobile-handle i{display:inline-block;width:40px;height:4px;border-radius:3px;background:rgba(15,30,50,.22)}
     .head{padding:4px 16px 12px}
     .foot{padding-bottom:9px}
     .tools{top:14px;right:14px}
-    /* ET-EDIT: 右下鈕要抬到「收合抽屜」+「瀏覽器工具列」之上，否則點不到。
-       56px = 收合抽屜高，14px = 留白，--bh = 瀏覽器工具列實測高度。 */
-    .fab{bottom:calc(56px + 14px + var(--bh, 0px) + env(safe-area-inset-bottom, 0px))}
+    /* ET-EDIT: 「回到全日本」在手機改到【右上、工具列下方】——
+       ① 原本放右下，會壓到 Leaflet 的縮放鈕（zoomControl 也是 bottomright）
+       ② 而且面板一展開就被蓋住／被藏起來（使用者回報「右邊按鈕消失」）
+       放右上則永遠可見、永遠不會被底部面板影響。
+       160px = 工具列最壞情況高度（3 顆 40px + 2 個 8px 間隙 + 上緣 14px）+ 10px 留白。 */
+    .fab{right:14px;top:160px;bottom:auto}
+    /* ET-EDIT: Leaflet 的縮放鈕在手機改到【左上、搜尋鈕下方】。
+       為什麼不用「量面板高度再把縮放鈕推上去」：那要 ResizeObserver + 過渡動畫同步，
+       實測難驗、容易在別的瀏覽器壞掉。移到左上則完全不需要量任何東西，
+       永遠不會被底部面板蓋住。
+       ⚠️ 用 position:fixed 而不是移動整個 .leaflet-bottom 容器 ——
+          容器裡還有 attribution，搬容器會把版權標示也搬走。
+       ⚠️ 62px = 搜尋鈕上緣 14px + 高度 38px + 10px 留白。 */
+    .leaflet-bottom.leaflet-right .leaflet-control-zoom{
+      position:fixed;left:14px;top:62px;right:auto;bottom:auto;margin:0
+    }
     .box{width:100%;max-height:92vh;max-height:92dvh}
   }
 </style>
@@ -458,6 +502,8 @@
 
 <aside class="panel" id="panel">
   <div class="mobile-handle" id="handle" title="展開／收合清單"><i></i></div>
+  <!-- ET-EDIT: 手機版收合鈕（桌機隱藏）。使用者回報「找不到關閉的方式」。 -->
+  <button class="psheetclose" id="panelClose" type="button" title="收合清單" aria-label="收合清單">✕</button>
   <div class="head">
     <div class="brand">
       <div class="mark" aria-hidden="true">◉</div>
@@ -583,11 +629,34 @@
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<!-- ET-EDIT: 隱藏 debug 面板（實機問題排查用；開啟方式見 CSS 註解） -->
+<div id="dbg" hidden role="dialog" aria-label="Debug 資訊">
+  <div class="dbgbox">
+    <div class="dbghd">
+      <b>Debug 資訊</b>
+      <button id="dbgCopy" type="button">複製全部</button>
+      <button id="dbgClose" type="button">關閉</button>
+    </div>
+    <pre id="dbgText">（載入中…）</pre>
+  </div>
+</div>
+
 <script>
 "use strict";
 /* 日本即時影像地圖 — 單頁前端
  * 資料來源：data/cameras.json（feed）、data/mapconfig.json（Carto 底圖設定）
  * 合約：feed 欄位名不得變更；Carto 金鑰只從 mapconfig.json 讀取，不寫死於程式碼。 */
+
+/* ET-EDIT ── 早期錯誤捕捉（debug 面板用）
+   ⚠️ 一定要放在**最前面**：boot() 期間的錯誤才是最需要看到的，
+      等到使用者開面板才裝就來不及了。 */
+const JLC_DBG = { errors: [], t0: Date.now() };
+window.addEventListener('error', e => {
+  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
+});
+window.addEventListener('unhandledrejection', e => {
+  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
+});
 
 /* ET-EDIT ── 手機版開場先收合面板
    為什麼：手機版面板是底部抽屜，展開時佔 74vh —— 一開站就蓋掉大半地圖，
@@ -658,7 +727,8 @@ function boot(feed, cfg, health){
   buildMap(cfg);
   bindKeyPop();                     // ET-EDIT: 自備 CARTO 金鑰（需 buildMap 之後，map 已存在）
   setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
-  setupFabs();                      // ET-EDIT: 搜尋鈕（左上）＋回到全日本（右下）的可見性
+  setupFabs();                      // ET-EDIT: 搜尋鈕（左上）＋回到全日本（右上）的可見性
+  setupDebug();                     // ET-EDIT: 隱藏 debug 面板（?debug=1 或連點新鮮度 5 下）
   buildStats(feed);
   buildFreshness(feed, health);     // ET-EDIT
   buildHealthBar(health);           // ET-EDIT
@@ -887,6 +957,124 @@ function stripBust(){
   history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
 }
 
+/* ET-EDIT ── 隱藏 debug 面板 ──────────────────────────────────
+   為什麼：實機（iOS Arc Search）的問題在桌面／模擬都重現不出來，
+   只能靠實機回報數字。這個面板把「視窗、按鈕、地圖」三類狀態一次列出來。
+
+   開啟：① 網址加 ?debug=1   ② 在「資料更新於…」連點 5 下
+   ⚠️ 每一行都是「真的去讀」而不是推測的 —— 使用者回報什麼就看什麼，
+      不要叫使用者描述畫面。 */
+function buildDebugLog(){
+  const L = [];
+  const r = el => { if(!el) return '(不存在)'; const b = el.getBoundingClientRect();
+    return `top=${Math.round(b.top)} bottom=${Math.round(b.bottom)} left=${Math.round(b.left)} w=${Math.round(b.width)} h=${Math.round(b.height)}`; };
+  const cs = (el, prop) => el ? getComputedStyle(el).getPropertyValue(prop) : '-';
+  const vv = window.visualViewport;
+
+  L.push('══ 環境 ══');
+  L.push(`時間        ${new Date().toISOString()}（載入後 ${Math.round((Date.now()-JLC_DBG.t0)/1000)}s）`);
+  L.push(`網址        ${location.href}`);
+  L.push(`UA          ${navigator.userAgent}`);
+  L.push(`平台        ${navigator.platform || '-'}  DPR=${devicePixelRatio}`);
+  L.push(`螢幕        ${screen.width}x${screen.height}  方向=${screen.orientation ? screen.orientation.type : '-'}`);
+  L.push(`語系        ${navigator.language}`);
+
+  L.push('');
+  L.push('══ 視窗 ══');
+  L.push(`innerWidth/Height   ${innerWidth} x ${innerHeight}`);
+  L.push(`visualViewport      ${vv ? `w=${Math.round(vv.width)} h=${Math.round(vv.height)} scale=${vv.scale} offsetTop=${Math.round(vv.offsetTop)}` : '不支援'}`);
+  L.push(`--vh / --bh         ${cs(document.documentElement,'--vh')||'(未設)'} / ${cs(document.documentElement,'--bh')||'(未設)'}`);
+  L.push(`--panelh            ${cs(document.documentElement,'--panelh')||'(未設)'}`);
+  L.push(`dvh 支援            ${CSS.supports('height','100dvh')}`);
+  // 直接量 env(safe-area-inset-bottom) —— 沒有 API 可讀，只能塞一個探針元素量
+  const saH = (() => { const d = document.createElement('div');
+    d.style.cssText = 'position:fixed;left:0;bottom:0;width:0;height:env(safe-area-inset-bottom,0px)';
+    document.body.appendChild(d); const h = Math.round(d.getBoundingClientRect().height); d.remove(); return h; })();
+  L.push(`safe-area 下緣      ${saH}px`);
+
+  L.push('');
+  L.push('══ 面板 ══');
+  const panel = $('#panel');
+  L.push(`collapsed           ${panel ? panel.classList.contains('collapsed') : '(無面板)'}`);
+  L.push(`rect                ${r(panel)}`);
+  L.push(`computed            max-height=${cs(panel,'max-height')} display=${cs(panel,'display')} bottom=${cs(panel,'bottom')}`);
+  L.push(`panelClose 顯示      ${cs($('#panelClose'),'display')}`);
+  L.push(`判定 mobile          ${innerWidth <= 820}（門檻 820）`);
+
+  L.push('');
+  L.push('══ 浮動按鈕 ══');
+  for(const [name, el] of [['搜尋鈕 #searchFab', $('#searchFab')], ['回到全日本 #btnReset', $('#btnReset')], ['工具列 .tools', $('.tools')]]){
+    L.push(`${name}`);
+    L.push(`  ${el ? (el.hidden ? 'hidden=true' : 'hidden=false') : ''} ${r(el)}  display=${cs(el,'display')}`);
+  }
+  const zoom = $('.leaflet-control-zoom');
+  L.push(`縮放鈕 .leaflet-control-zoom`);
+  L.push(`  ${r(zoom)}  position=${cs(zoom,'position')} left=${cs(zoom,'left')} top=${cs(zoom,'top')} z=${cs(zoom,'z-index')}`);
+
+  L.push('');
+  L.push('══ 地圖 ══');
+  const J = window.JLC || {};
+  const tileSrc = [...document.querySelectorAll('img.leaflet-tile')].map(i => i.getAttribute('src')).filter(Boolean);
+  const hosts = {};
+  for(const u of tileSrc){ try { const h = new URL(u).host; hosts[h] = (hosts[h]||0)+1; } catch(e){} }
+  L.push(`JLC.map / JLC.tile   ${!!J.map} / ${!!J.tile}`);
+  L.push(`leaflet-container    ${!!$('.leaflet-container')}`);
+  L.push(`圖磚 img              ${document.querySelectorAll('img.leaflet-tile').length}（有 src ${tileSrc.length}）`);
+  L.push(`圖磚主機              ${Object.keys(hosts).length ? JSON.stringify(hosts) : '(還沒載到)'}`);
+  L.push(`noKeyMode            ${J.noKeyMode}`);
+  L.push(`mapconfig            ${J.mapconfig ? `有（key_present=${J.mapconfig.key_present}）` : '無（公開站正常）'}`);
+  L.push(`自備金鑰              ${(() => { try { return localStorage.getItem('jlc.carto.key') ? '有' : '無'; } catch(e){ return '讀不到'; } })()}`);
+  L.push(`marker/cluster       ${document.querySelectorAll('.marker-cluster,.leaflet-marker-icon').length}`);
+  L.push(`筆數 / 已渲染         ${J.total || '-'} / ${J.rendered || '-'}`);
+
+  L.push('');
+  L.push('══ 錯誤 ══');
+  L.push(JLC_DBG.errors.length ? JLC_DBG.errors.join('\n') : '(無)');
+  return L.join('\n');
+}
+
+function setupDebug(){
+  const box = $('#dbg'), txt = $('#dbgText');
+  if(!box || !txt) return;
+  const open = () => {
+    txt.textContent = buildDebugLog();
+    box.hidden = false;
+    txt.scrollTop = 0;
+  };
+  const close = () => { box.hidden = true; };
+  $('#dbgClose').addEventListener('click', close);
+  box.addEventListener('click', e => { if(e.target === box) close(); });   // 點背景關閉
+
+  const cp = $('#dbgCopy');
+  cp.addEventListener('click', () => {
+    const s = buildDebugLog();
+    txt.textContent = s;
+    const done = () => { cp.textContent = '已複製 ✓'; cp.classList.add('ok');
+                         setTimeout(() => { cp.textContent = '複製全部'; cp.classList.remove('ok'); }, 1800); };
+    const fallback = () => {                       // 沒有 clipboard API 時的退路：全選，讓使用者自己複製
+      const rg = document.createRange(); rg.selectNodeContents(txt);
+      const sel = getSelection(); sel.removeAllRanges(); sel.addRange(rg);
+      cp.textContent = '已全選 → 請手動複製'; cp.classList.add('ok');
+    };
+    if(navigator.clipboard && navigator.clipboard.writeText){
+      navigator.clipboard.writeText(s).then(done).catch(fallback);
+    } else { fallback(); }
+  });
+
+  // ① 網址 ?debug=1
+  if(new URLSearchParams(location.search).get('debug') === '1'){ setTimeout(open, 1200); }
+  // ② 連點「資料更新於…」5 下（實機沒有網址列可改時的入口）
+  let taps = 0, lastTap = 0;
+  document.addEventListener('click', e => {
+    if(e.target.closest && e.target.closest('#fresh')){
+      const now = Date.now();
+      taps = (now - lastTap < 900) ? taps + 1 : 1;
+      lastTap = now;
+      if(taps >= 5){ taps = 0; open(); }
+    }
+  }, true);
+}
+
 /* ET-EDIT ── 量出「瀏覽器底部工具列」的高度，寫進 CSS 變數 --bh
    為什麼：iOS 的 Arc Search 等 App 有自己的底部工具列**覆蓋**在網頁上，
    貼底元素會被它蓋住 → 看得到、點不到。
@@ -916,21 +1104,26 @@ function syncBottomChrome(){
    為什麼：手機版把面板做成底部抽屜，收合後只剩 56px 的把手 ——
    沒有「這裡可以搜尋」的提示，使用者找不到搜尋入口。
 
-   ⚠️ 手機版抽屜**展開時（74vh）會蓋掉右下角** → 回到全日本那顆要讓位，
-      否則變成「看得到卻點不到」。
+   ⚠️ 手機版「回到全日本」已改到右上、工具列下方（見 CSS）：
+      ① 原本放右下會壓到 Leaflet 的縮放鈕（zoomControl 也是 bottomright）
+      ② 面板一展開就被蓋住 → 使用者回報「點搜尋後右邊按鈕消失」
+      放右上就永遠可見，所以這裡**不再**因面板展開而藏它。
    ⚠️ 用 MutationObserver 監看 class，不是只在 #handle 的 click 裡同步 ——
-      面板的 class 有**三條路徑**會變：開場自動收合（見本檔開頭的 ET-EDIT）、
-      點 #handle、點機位時 focusCamera() 也會收合。只綁 click 會漏掉後兩者。 */
+      面板的 class 有**四條路徑**會變：開場自動收合（見本檔開頭的 ET-EDIT）、
+      點 #handle、點 #panelClose、點機位時 focusCamera() 也會收合。 */
 function setupFabs(){
-  const searchFab = $('#searchFab'), resetFab = $('#btnReset'), panel = $('#panel');
+  const searchFab = $('#searchFab'), panel = $('#panel');
   if(!panel) return;
 
   const sync = () => {
     const mobile = window.innerWidth <= 820;
     const collapsed = panel.classList.contains('collapsed');
     if(searchFab) searchFab.hidden = !(mobile && collapsed);   // 只在手機收合時出現
-    if(resetFab) resetFab.hidden = mobile && !collapsed;       // 桌面常駐；手機展開時讓位
   };
+
+  const collapse = () => panel.classList.add('collapsed');
+  const pc = $('#panelClose');
+  if(pc) pc.addEventListener('click', collapse);
 
   if(searchFab){
     searchFab.addEventListener('click', () => {
@@ -944,6 +1137,30 @@ function setupFabs(){
   new MutationObserver(sync).observe(panel, {attributes:true, attributeFilter:['class']});
   window.addEventListener('resize', sync);
   sync();
+
+  /* ET-EDIT ── 量面板實際高度 → --panelh
+     ⚠️ 目前**沒有任何 CSS 用到它**：手機版縮放鈕已改成固定放左上（見 CSS），
+        不需要量面板高度。這個變數留著是為了以後要「讓某個東西浮在面板之上」時可用。
+     ⚠️ 面板高度是「內容決定」的（max-height 只是上限）→ 只能用量的，不能寫死。
+     ⚠️ 面板展開／收合有 .25s 過渡動畫 → 高度連續變化，只量一次會拿到中途值。
+        用三重保險：① ResizeObserver ② transitionend ③ class 變動後 rAF 連量 400ms
+        （headless／虛擬時間下 ResizeObserver 不一定回報，實測踩過）。 */
+  const measurePanel = () => {
+    const root = document.documentElement;
+    if(window.innerWidth > 820){ root.style.removeProperty('--panelh'); return; }
+    root.style.setProperty('--panelh', Math.round(panel.getBoundingClientRect().height) + 'px');
+  };
+  const trackPanel = () => {
+    measurePanel();
+    let n = 0;
+    const step = () => { measurePanel(); if(++n < 25) requestAnimationFrame(step); };
+    requestAnimationFrame(step);            // 約 400ms（60fps）
+  };
+  measurePanel();
+  if(window.ResizeObserver) new ResizeObserver(measurePanel).observe(panel);
+  panel.addEventListener('transitionend', measurePanel);
+  window.addEventListener('resize', () => { measurePanel(); trackPanel(); });
+  new MutationObserver(trackPanel).observe(panel, {attributes:true, attributeFilter:['class']});
 
   // 量瀏覽器底部工具列（Arc Search 等會蓋住網頁底部 → 貼底鈕點不到）
   syncBottomChrome();
