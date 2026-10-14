@@ -1195,8 +1195,12 @@ function setupFabs(){
   if(searchFab){
     searchFab.addEventListener('click', () => {
       panel.classList.remove('collapsed');
+      // ET-EDIT ⚠️ 手機**不要**自動 focus：iOS 一 focus 就彈出鍵盤，
+      //   可視區瞬間被吃掉一半以上，地圖和浮動鈕全被擠掉 ——
+      //   實機回報「Auto focus 會把 UI 推不見」。按鈕只負責「打開面板」，
+      //   要打字再自己點輸入框（桌面沒有鍵盤問題，維持自動 focus）。
       const q = $('#q');
-      if(q) q.focus();                 // 展開後直接可打字，省一次點擊
+      if(q && window.innerWidth > 820) q.focus();
       sync();
     });
   }
