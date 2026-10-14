@@ -34,7 +34,9 @@ window.addEventListener('error', e => {
   }
   // 跨網域腳本拋的錯，瀏覽器只會給 "Script error." 且位置是 :0:0（資訊被刻意遮蔽）。
   const where = e.filename ? `${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}` : '(無檔名 → 跨網域腳本，資訊被瀏覽器遮蔽)';
-  JLC_DBG.errors.push(`[${ts}] ${e.message} @ ${where}`);
+  // 有 Error 物件就撈堆疊（被遮蔽時 e.error 會是 null，就沒得撈）。
+  const st = e.error && e.error.stack ? ' ┄ ' + String(e.error.stack).split('\n').slice(1, 3).join(' ┄ ').trim().slice(0, 180) : '';
+  JLC_DBG.errors.push(`[${ts}] ${e.message} @ ${where}${st}`);
 }, true);   // ⚠️ capture:true 必要 —— 資源載入錯誤不會冒泡
 window.addEventListener('unhandledrejection', e => {
   JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
@@ -1113,6 +1115,17 @@ function buildDebugLog(){
   L.push('');
   L.push('══ 錯誤 ══');
   L.push(JLC_DBG.errors.length ? JLC_DBG.errors.join('\n') : '(無)');
+  // 幫使用者（跟我）直接判讀，免得每次都要問「這筆是什麼」。
+  // 判準：本頁自己載入的腳本都有檔名可歸屬（inline = 同源、CDN 有 crossorigin），
+  //       所以「無檔名」的錯誤不可能是它們產生的。
+  if(JLC_DBG.errors.some(x => x.includes('無檔名'))){
+    const n = document.scripts.length;
+    const nCors = [...document.scripts].filter(s => s.crossOrigin).length;
+    L.push(`  ↳ 判讀：本頁只載入 ${n} 支腳本（${n - nCors} inline 同源 + ${nCors} 支 CDN 已帶 crossorigin），`);
+    L.push('     都不可能產生「無檔名」的錯誤 → 來源幾乎確定是**瀏覽器／App 自己注入的程式**');
+    L.push('     （iOS AutoFill、Arc Search 的 WKUserScript、內容阻擋器都屬於這類），與本頁無關。');
+    L.push('     要確認：用【一般 Safari】開同一網址（錯誤會消失），或看桌面 Chrome（本頁為 0 筆）。');
+  }
   if(JLC_DBG.warns && JLC_DBG.warns.length){
     L.push('');
     L.push('══ 警告（console.warn）══');
