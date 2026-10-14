@@ -256,8 +256,12 @@
   .tools button[hidden]{display:none}
   /* ET-EDIT: 右下懸浮鈕（回到全日本視角）
      ⚠️ [hidden] 一定要自己補 —— .fab 用了 display:grid，
-        會蓋掉瀏覽器預設的 [hidden]{display:none}（本專案已踩三次）。 */
-  .fab{position:fixed;right:18px;bottom:calc(18px + var(--bh, 0px));z-index:520;
+        會蓋掉瀏覽器預設的 [hidden]{display:none}（本專案已踩三次）。
+     ⚠️ bottom 不能用 18px：Leaflet 的縮放鈕也在右下（zoomControl position:'bottomright'），
+        兩者會疊在一起（使用者 PC 截圖回報圓形鈕壓在 +/− 上）。
+        96px = 18(下緣留白) + 64(縮放鈕實測高) + 10(Leaflet 的 margin) + 4(間隙)
+        —— 兩者都貼底，所以這個補償量不隨視窗高度改變。 */
+  .fab{position:fixed;right:18px;bottom:96px;z-index:520;
     width:44px;height:44px;border:0;border-radius:50%;cursor:pointer;
     background:#fff;color:var(--ink-2);display:grid;place-items:center;
     box-shadow:0 6px 20px rgba(10,25,45,.24);
@@ -627,8 +631,8 @@
   </div>
 </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js" crossorigin="anonymous"></script>
 <!-- ET-EDIT: 隱藏 debug 面板（實機問題排查用；開啟方式見 CSS 註解） -->
 <div id="dbg" hidden role="dialog" aria-label="Debug 資訊">
   <div class="dbgbox">
@@ -652,6 +656,17 @@
       等到使用者開面板才裝就來不及了。 */
 const JLC_DBG = { errors: [], t0: Date.now() };
 window.addEventListener('error', e => {
+  // ⚠️ 資源（script/link/img）載入失敗時 e.message 是空的、e.target 才是線索
+  //    → 分開處理，否則「Leaflet CDN 掛了」會變成一條無用的空白錯誤。
+  const t = e.target;
+  if(t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')){
+    const u = t.src || t.href || '(未知)';
+    JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] 資源載入失敗 <${t.tagName.toLowerCase()}> ${u}`);
+    return;
+  }
+  // ⚠️ 跨網域腳本（CDN）拋的錯，瀏覽器只會給 "Script error." 且位置是 :0:0 ——
+  //    看不出所以然。解法是幫 script 標籤加 crossorigin="anonymous"，
+  //    讓 CDN 以 CORS 回應、錯誤才有細節（unpkg 有 access-control-allow-origin: *）。
   JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
 });
 window.addEventListener('unhandledrejection', e => {
