@@ -29,6 +29,9 @@
   }
   *{box-sizing:border-box}
   html,body{height:100%}
+  /* ET-EDIT: 手機用 dvh（動態可視高度）—— 見下方 .fab/.panel 的說明。
+     沒有 dvh 的瀏覽器沿用 height:100%（＝大視窗高度），至少有 fallback。 */
+  @supports (height:100dvh){ html,body{height:100dvh} }
   body{
     margin:0; overflow:hidden; background:var(--bg); color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC","Hiragino Sans","Yu Gothic UI",sans-serif;
@@ -38,15 +41,21 @@
   a{color:var(--accent)}
 
   /* ── 地圖：視覺主體，滿版 ───────────────────────────── */
-  #map{position:absolute;inset:0;background:#dfe6ee;z-index:0}
+  /* ET-EDIT: 手機實機修正 —— 全部改成 position:fixed
+     為什麼：absolute 是對「初始包含區塊」定位，手機上那等於**大的視窗高度**
+     （想像網址列收起時的狀態），但使用者看到的是**小的可視區**。
+     結果貼底的東西（抽屜、右下按鈕）會被網址列蓋住 → 看得到、點不到。
+     桌面模擬沒有網址列，所以是「模擬正常、實機不行」。
+     fixed 才是對可視區定位。 */
+  #map{position:fixed;inset:0;background:#dfe6ee;z-index:0}
   .leaflet-container{font:inherit;background:#dfe6ee}
   .leaflet-control-attribution{font-size:10px;background:rgba(255,255,255,.78)}
   .leaflet-bar a{border-radius:8px}
 
   /* ── 玻璃面板 ──────────────────────────────────────── */
   .panel{
-    position:absolute; z-index:900; display:flex; flex-direction:column;
-    left:18px; top:18px; bottom:18px; width:372px; max-width:calc(100vw - 36px);
+    position:fixed; z-index:900; display:flex; flex-direction:column;
+    left:18px; top:18px; bottom:calc(18px + var(--bh, 0px)); width:372px; max-width:calc(100vw - 36px);
     background:var(--card); backdrop-filter:blur(18px) saturate(150%);
     -webkit-backdrop-filter:blur(18px) saturate(150%);
     border:1px solid rgba(255,255,255,.65); border-radius:var(--radius);
@@ -230,7 +239,7 @@
   .foot .legend i{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:3px;vertical-align:0}
 
   /* ── 地圖工具列 ───────────────────────────────────── */
-  .tools{position:absolute;right:18px;top:18px;z-index:900;display:flex;flex-direction:column;gap:8px}
+  .tools{position:fixed;right:18px;top:18px;z-index:900;display:flex;flex-direction:column;gap:8px}
   .tools button{
     width:40px;height:40px;border-radius:12px;border:1px solid rgba(255,255,255,.7);
     background:var(--card);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
@@ -248,7 +257,7 @@
   /* ET-EDIT: 右下懸浮鈕（回到全日本視角）
      ⚠️ [hidden] 一定要自己補 —— .fab 用了 display:grid，
         會蓋掉瀏覽器預設的 [hidden]{display:none}（本專案已踩三次）。 */
-  .fab{position:absolute;right:18px;bottom:18px;z-index:520;
+  .fab{position:fixed;right:18px;bottom:calc(18px + var(--bh, 0px));z-index:520;
     width:44px;height:44px;border:0;border-radius:50%;cursor:pointer;
     background:#fff;color:var(--ink-2);display:grid;place-items:center;
     box-shadow:0 6px 20px rgba(10,25,45,.24);
@@ -306,7 +315,7 @@
   .searchfab{display:none}
   @media (max-width:820px){
     .searchfab{
-      position:absolute;left:14px;top:14px;z-index:520;
+      position:fixed;left:14px;top:14px;z-index:520;
       display:flex;align-items:center;gap:6px;
       padding:9px 14px 9px 11px;border:0;border-radius:999px;cursor:pointer;
       background:rgba(255,255,255,.97);color:var(--ink);
@@ -352,11 +361,16 @@
   /* ── 播放 Modal ───────────────────────────────────── */
   #modal{
     position:fixed;inset:0;z-index:2000;display:none;align-items:center;justify-content:center;
-    background:rgba(8,15,25,.74);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:18px
+    background:rgba(8,15,25,.74);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);padding:18px;
+    /* ET-EDIT: 手機上要讓開瀏覽器底部工具列（Arc Search 等會蓋住網頁底部）。
+       置中是在「大視窗」裡置中 → 不補的話整個框會偏下、底部被切。 */
+    padding-bottom:calc(18px + var(--bh, 0px) + env(safe-area-inset-bottom, 0px))
   }
   #modal.show{display:flex}
   .box{
     background:#fff;border-radius:16px;overflow:hidden;width:min(1040px,96vw);max-height:94vh;
+    /* ET-EDIT: 用實測可視高度，不用 vh（定義歧義 + 手機上偏高導致框超出畫面） */
+    max-height:calc(var(--vh, 100vh) - 36px - var(--bh, 0px));
     display:flex;flex-direction:column;box-shadow:0 24px 70px rgba(0,0,0,.45)
   }
   .box .hd{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}
@@ -393,8 +407,15 @@
   /* ── 響應式：手機版底部抽屜 ────────────────────────── */
   @media (max-width:820px){
     .panel{
-      left:0;right:0;bottom:0;top:auto;width:auto;max-width:none;border-radius:18px 18px 0 0;
-      max-height:74vh;transition:max-height .25s ease
+      left:0;right:0;top:auto;width:auto;max-width:none;border-radius:18px 18px 0 0;
+      /* ET-EDIT: 抬到瀏覽器底部工具列之上（--bh，由 JS 用視覺視窗 API 算出）
+         + 讓開 iOS 首頁指示條（safe-area）。
+         ⚠️ 為什麼要抬：iOS 的 Arc Search 等 App 有自己的底部工具列覆蓋在網頁上，
+            貼底元素會被蓋住 → 看得到、點不到。 */
+      bottom:calc(var(--bh, 0px) + env(safe-area-inset-bottom, 0px));
+      /* ET-EDIT: max-height 用「實測可視高度」—— vh/dvh 各家定義不一致，
+         在手機上容易比實際可視區高，抽屜就顯得過大並蓋掉下方按鈕。 */
+      max-height:74vh; max-height:calc(var(--vh, 100vh) * .74); transition:max-height .25s ease
     }
     /* 收合：以 max-height 裁切（不用 transform — backdrop-filter 會使 transform 失效）*/
     .panel.collapsed{max-height:56px}
@@ -405,11 +426,12 @@
     .mobile-handle{display:block;padding:10px 0 6px;cursor:pointer;text-align:center}
     .mobile-handle i{display:inline-block;width:40px;height:4px;border-radius:3px;background:rgba(15,30,50,.22)}
     .head{padding:4px 16px 12px}
-    .foot{padding-bottom:calc(9px + env(safe-area-inset-bottom, 0px))}
+    .foot{padding-bottom:9px}
     .tools{top:14px;right:14px}
-    /* 右下懸浮鈕要抬到「收合抽屜」之上，否則會被抽屜蓋住 */
-    .fab{bottom:calc(56px + 14px + env(safe-area-inset-bottom, 0px))}
-    .box{width:100%;max-height:92vh}
+    /* ET-EDIT: 右下鈕要抬到「收合抽屜」+「瀏覽器工具列」之上，否則點不到。
+       56px = 收合抽屜高，14px = 留白，--bh = 瀏覽器工具列實測高度。 */
+    .fab{bottom:calc(56px + 14px + var(--bh, 0px) + env(safe-area-inset-bottom, 0px))}
+    .box{width:100%;max-height:92vh;max-height:92dvh}
   }
 </style>
 </head>
@@ -577,6 +599,10 @@
 if(window.innerWidth <= 820){
   const _p = document.getElementById('panel');
   if(_p) _p.classList.add('collapsed');
+  // ⚠️ 同步把搜尋鈕放出來，不要等 boot() —— boot 要等資料 fetch 完，
+  //    中間那幾百毫秒使用者會看到「面板收了但沒有搜尋入口」。
+  const _sf = document.getElementById('searchFab');
+  if(_sf) _sf.hidden = false;
 }
 
 const JLC = {
@@ -861,6 +887,31 @@ function stripBust(){
   history.replaceState(null, '', u.pathname + (u.search || '') + u.hash);
 }
 
+/* ET-EDIT ── 量出「瀏覽器底部工具列」的高度，寫進 CSS 變數 --bh
+   為什麼：iOS 的 Arc Search 等 App 有自己的底部工具列**覆蓋**在網頁上，
+   貼底元素會被它蓋住 → 看得到、點不到。
+   （桌面模擬沒有這層，所以「模擬正常、實機不行」——只能靠實機回報才知道。）
+
+   怎麼量：innerHeight 是「版面視窗」，visualViewport.height 是「真的看得見的高度」，
+   差額就是被瀏覽器 UI 蓋掉的部分。
+   ⚠️ max(0,…)：桌面上兩者相等 → --bh = 0，不影響原有版面。
+   ⚠️ 縮放中（scale≠1）不改版面，否則 pinch-zoom 會讓整個 UI 亂跳。
+   ⚠️ 要監聽 visualViewport 的 resize —— iOS 上網址列收合／展開主要觸發它。 */
+function syncBottomChrome(){
+  const vv = window.visualViewport;
+  const root = document.documentElement;
+  if(!vv || (vv.scale && vv.scale !== 1)){ return; }
+  let h = Math.round(window.innerHeight - vv.height - (vv.offsetTop || 0));
+  if(h < 8) h = 0;                   // 抖動雜訊歸零
+  if(h > 140) h = 140;               // 上限，避免異常值把版面推爛
+  root.style.setProperty('--bh', h + 'px');
+  /* ⚠️ 也要把「實際看得見的高度」直接給 CSS（--vh）。
+     為什麼不只用 dvh/vh：各家對 vh 的定義不一致（大視窗 vs 小視窗），
+     而 visualViewport.height 是**實測**值，沒有定義歧義。
+     → CSS 一律用 calc(var(--vh, 100vh) …)，算出來就是真實可見範圍。 */
+  root.style.setProperty('--vh', Math.round(vv.height) + 'px');
+}
+
 /* ET-EDIT ── 懸浮鈕的可見性（搜尋、回到全日本）────────────────
    為什麼：手機版把面板做成底部抽屜，收合後只剩 56px 的把手 ——
    沒有「這裡可以搜尋」的提示，使用者找不到搜尋入口。
@@ -893,6 +944,15 @@ function setupFabs(){
   new MutationObserver(sync).observe(panel, {attributes:true, attributeFilter:['class']});
   window.addEventListener('resize', sync);
   sync();
+
+  // 量瀏覽器底部工具列（Arc Search 等會蓋住網頁底部 → 貼底鈕點不到）
+  syncBottomChrome();
+  window.addEventListener('resize', syncBottomChrome);
+  if(window.visualViewport){
+    window.visualViewport.addEventListener('resize', syncBottomChrome);
+    window.visualViewport.addEventListener('scroll', syncBottomChrome);
+  }
+  document.addEventListener('visibilitychange', () => { if(!document.hidden) syncBottomChrome(); });
 }
 
 /* ET-EDIT ── 更新監看（兩種通知）────────────────────────────
@@ -1038,33 +1098,58 @@ function applyBasemap(cfg, dark){
   //   ② styles.* 內容含空的 key=（key= 後面沒東西）→ 視為無金鑰
   // 目的：未來要公開發佈時，只要不帶環境變數，前端就自動切到免金鑰模式，
   //       不需改任何程式或設定檔。
+  // ET-EDIT（2026-10-14）⚠️ Carto 的「免金鑰 CDN」已經死了
+  //   Carto 現在要求圖磚一定要帶 key：無 key／空 key／亂碼 key 都回同一個
+  //   2049 bytes 的「API KEY REQUIRED」佔位圖（真 key 是 4289B，實測同位置 z13）。
+  //   原本這裡指向 Carto 免金鑰 URL → 公開站（發佈包不含 mapconfig.json）整張地圖
+  //   變成浮水印，等同沒有底圖。
+  //   改用**真正免金鑰**的 OpenStreetMap 標準圖磚（實測 6555B、無浮水印）。
+  //   ⚠️ OSM 沒有深色版 → 深色切換在免金鑰模式下無效，改以 toast 告知（見 btnBase）。
   const NOKEY = {
-    voyager: 'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    dark_all: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png'
+    voyager:  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    dark_all: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   };
-  const picked = dark ? styles.dark_all : styles.voyager;
   const hasKey = cfg ? (cfg.key_present !== false) : false;
   const brokenKey = !picked || /[?&]key=(&|$)/.test(picked);   // key= 後為空或無值
+  const noKeyMode = !hasKey || brokenKey;                      // 無金鑰模式（一律走 OSM 退路）
   const base = dark ? NOKEY.dark_all : NOKEY.voyager;
 
-  // ET-EDIT 優先序：① 使用者自備金鑰（只存在自己的瀏覽器）
-  //                ② mapconfig 提供的金鑰  ③ 免金鑰 CDN
+  // 沒有 mapconfig（＝公開站）時，若使用者自備金鑰，仍然要指向 Carto —— 用預設樣式 URL。
+  const CARTO_DEFAULT = {
+    voyager:  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
+    dark_all: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png'
+  };
+  // 把 URL 上既有的 key= 拿掉再掛新的（避免出現兩個 key 參數，讓使用者的金鑰勝出）
+  function withKey(u, k){
+    u = u.replace(/([?&])key=[^&]*/g, '$1').replace(/[?&]+$/, '');
+    return u + (u.indexOf('?') >= 0 ? '&' : '?') + 'key=' + encodeURIComponent(k);
+  }
+
+  // ET-EDIT 優先序：① 使用者自備金鑰（只存在自己的瀏覽器）→ Carto
+  //                ② mapconfig 提供的金鑰                    → Carto
+  //                ③ 都沒有                                  → OSM（免金鑰，非 Carto！）
+  //   ⚠️ ③ 不能再用 Carto：無 key 只會拿到「API KEY REQUIRED」佔位圖。
   const uKey = cartoKey();
+  const cartoPick = (picked && !brokenKey) ? picked : (dark ? CARTO_DEFAULT.dark_all : CARTO_DEFAULT.voyager);
   const url = uKey
-    ? base + '?key=' + encodeURIComponent(uKey)
-    : ((!hasKey || brokenKey) ? base : picked);
+    ? withKey(cartoPick, uKey)
+    : (noKeyMode ? base : picked);
 
   JLC.tile = L.tileLayer(url, {
-    subdomains:(cfg && cfg.subdomains) || 'abcd',
+    // OSM 不用 {s} 子網域（已不建議）；Carto 用 abcd。
+    subdomains: (uKey || !noKeyMode) ? ((cfg && cfg.subdomains) || 'abcd') : '',
     maxZoom:(cfg && cfg.max_zoom) || 18,
     // maxNativeZoom：圖磚實際可用的最高層級。超過時 Leaflet 會**放大既有圖磚**
     // 而非向伺服器要更高層級（那會拿到灰底佔位圖）。
     // 實測：Carto 在 z20 的鄉村地區已是灰底（石垣島 z20=2599B、奥尻島全層級 103B）。
     maxNativeZoom:(cfg && cfg.max_native_zoom) || 18,
     detectRetina:(cfg && cfg.retina) !== false,
-    attribution:(cfg && cfg.attribution) || '&copy; OpenStreetMap contributors &copy; CARTO',
+    attribution: (noKeyMode && !uKey)
+      ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      : ((cfg && cfg.attribution) || '&copy; OpenStreetMap contributors &copy; CARTO'),
     crossOrigin:true
   }).addTo(map);
+  JLC.noKeyMode = noKeyMode && !uKey;     // 供深色切換提示用
 
   // ET-EDIT: 自備金鑰若無效（會被 Carto 擋），使用者只會看到灰底卻不知原因 → 主動提示。
   //   只在「有自備金鑰」時掛，且同一 session 只提示一次，不洗版。
@@ -1282,7 +1367,15 @@ function bindControls(){
     render(true);
   });
 
-  $('#btnBase').addEventListener('click', () => { JLC.dark = !JLC.dark; applyBasemap(JLC.mapconfig, JLC.dark); });
+  $('#btnBase').addEventListener('click', () => {
+    JLC.dark = !JLC.dark;
+    applyBasemap(JLC.mapconfig, JLC.dark);
+    // ET-EDIT: 免金鑰模式走 OSM，沒有深色版 → 明確告知，別讓使用者以為切換壞了
+    if(JLC.noKeyMode && JLC.dark){
+      toast({key:'darknokey', icon:'🎨', title:'深色底圖需要金鑰',
+        body:'目前是免金鑰的 OpenStreetMap 圖磚，只有一種樣式。填一組 CARTO API key 即可切換深色。'});
+    }
+  });
   $('#btnReset').addEventListener('click', () => JLC.map.flyTo([37.6, 137.8], 5, {duration:.6}));
   $('#handle').addEventListener('click', () => $('#panel').classList.toggle('collapsed'));
 
