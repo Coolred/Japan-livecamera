@@ -327,7 +327,7 @@ for(const lv of ['error', 'warn']){
   @media (max-width:640px){ .keypop{right:14px;top:64px;width:calc(100vw - 28px)} }
   /* ET-EDIT: Toast —— 通用浮動通知（右下堆疊、由右滑入、不擋操作）
      第一個使用者：版本更新提示。其他通知可直接沿用 .toast 這個結構。 */
-  .toasts{position:fixed;right:18px;bottom:18px;z-index:1100;display:flex;
+  .toasts{position:fixed;right:18px;bottom:18px;z-index:3200;display:flex;
     flex-direction:column;gap:9px;align-items:flex-end;
     max-width:min(358px,calc(100vw - 28px));pointer-events:none}
   .toast{pointer-events:auto;display:flex;gap:11px;align-items:flex-start;width:100%;
@@ -697,7 +697,7 @@ for(const lv of ['error', 'warn']){
 <div id="dbg" hidden role="dialog" aria-label="Debug 資訊">
   <div class="dbgbox">
     <div class="dbghd">
-      <b>Debug 資訊</b>
+      <b id="dbgTitle">Debug 資訊</b>
       <button id="dbgCopy" type="button">複製全部</button>
       <button id="dbgClose" type="button">關閉</button>
     </div>
@@ -1069,12 +1069,15 @@ function buildDebugLog(){
   const lwH = lw ? Math.round(lw.getBoundingClientRect().height) : 0;
   L.push(`列表區高度           ${lwH}px${lwH ? `（約 ${(lwH / 76).toFixed(1)} 列，單列約 76px）` : ''}`);
   L.push(`  head/controls/foot  ${['.head', '.controls', '.foot'].map(s => { const e = $(s); return e ? Math.round(e.getBoundingClientRect().height) : 0; }).join(' / ')} px`);
-  // 逐個子區塊量 —— 面板高度對不上時，這裡一眼看出是哪一塊偷偷佔位
+  // 逐個子區塊量 —— 面板高度對不上時，一眼看出是哪一塊偷偷佔位
   // （例如 hidden 的元素被自訂 display 蓋掉，空的還是佔高度）。
-  L.push('  子區塊明細：');
-  if(panel) for(const c of panel.children){
-    const b = c.getBoundingClientRect();
-    L.push(`    ${(c.id || c.className || c.tagName).toString().slice(0, 22).padEnd(23)}h=${String(Math.round(b.height)).padStart(4)}  display=${getComputedStyle(c).display}${c.hidden ? '  [hidden]' : ''}`);
+  // ⚠️ 只列「有高度的」：面板收合時其他全是 0，列出來只是灌字數、撐爆 Discord 上限。
+  const kids = panel ? [...panel.children]
+    .map(c => ({ c, h: Math.round(c.getBoundingClientRect().height) }))
+    .filter(k => k.h > 0) : [];
+  if(kids.length){
+    L.push('  佔位子區塊：' + kids.map(k =>
+      `${(k.c.id || k.c.className || k.c.tagName).toString().split(' ')[0]}=${k.h}`).join(' '));
   }
   L.push(`判定 mobile          ${innerWidth <= 820}（門檻 820）`);
   // iOS 會在「輸入框字級 < 16px」時自動放大整個頁面 —— 量出來才驗得到有沒有踩到
@@ -1116,21 +1119,15 @@ function buildDebugLog(){
     for(const x of JLC_DBG.warns.slice(0, 12)) L.push('  ' + x);
   }
 
-  // 「Script error. @ :0:0」是瀏覽器對**跨網域腳本**的遮蔽（連 crossorigin 也問不出來時）。
-  // 把頁面上實際載入的腳本全列出來 —— 如果有瀏覽器／App 偷偷注入的東西，這裡會露出來。
+  // 「Script error. @ :0:0」是瀏覽器對**跨網域腳本**的遮蔽。把頁面上實際載入的腳本
+  // 列出來 —— 如果有瀏覽器／App 偷偷注入的東西，這裡會露出來。
+  // ⚠️ 精簡過：完整 URL 太長，一則 Discord 訊息（2000 字）塞不下，使用者得分兩次貼。
+  const short = u => String(u).replace(/^https?:\/\//, '').replace('/dist/', '/').slice(0, 46);
   L.push('');
   L.push('══ 已載入腳本 ══');
   for(const s of document.scripts){
-    L.push(`  ${s.src || '(inline)'}${s.crossOrigin ? '  [crossorigin=' + s.crossOrigin + ']' : ''}`);
+    L.push(`  ${s.src ? short(s.src) + (s.crossOrigin ? ' [cors]' : '') : '(inline)'}`);
   }
-  // 資源計時 API 看得到「實際連線出去的」資源（含被注入的），比 document.scripts 更全。
-  try {
-    const rs = performance.getEntriesByType('resource')
-      .filter(r => r.initiatorType === 'script' || r.initiatorType === 'link')
-      .map(r => `${r.initiatorType}: ${r.name.split('/').slice(0,3).join('/')}${r.name.startsWith(location.origin) ? '（本站）' : '（外部）'}`);
-    L.push(`  實際載入（resource timing）：${rs.length ? '' : '(無)'}`);
-    for(const x of [...new Set(rs)]) L.push(`    ${x}`);
-  } catch(e){ L.push(`  (resource timing 讀不到: ${e.message})`); }
 
   return L.join('\n');
 }
@@ -1138,8 +1135,16 @@ function buildDebugLog(){
 function setupDebug(){
   const box = $('#dbg'), txt = $('#dbgText');
   if(!box || !txt) return;
+  // 標題帶字數：使用者要貼進 Discord（單則上限 2000 字），
+  // 一眼就知道這份塞不塞得下、會不會又得分兩次貼。
+  const setTitle = s => {
+    const t = $('#dbgTitle');
+    if(t) t.textContent = `Debug 資訊 · ${s.length} 字${s.length > 1900 ? '（超過 Discord 單則上限）' : ''}`;
+  };
   const open = () => {
-    txt.textContent = buildDebugLog();
+    const s = buildDebugLog();
+    txt.textContent = s;
+    setTitle(s);
     box.hidden = false;
     txt.scrollTop = 0;
   };
@@ -1151,6 +1156,7 @@ function setupDebug(){
   cp.addEventListener('click', () => {
     const s = buildDebugLog();
     txt.textContent = s;
+    setTitle(s);
     const done = () => { cp.textContent = '已複製 ✓'; cp.classList.add('ok');
                          setTimeout(() => { cp.textContent = '複製全部'; cp.classList.remove('ok'); }, 1800); };
     const fallback = () => {                       // 沒有 clipboard API 時的退路：全選，讓使用者自己複製
