@@ -1109,6 +1109,7 @@ function applyBasemap(cfg, dark){
     voyager:  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     dark_all: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
   };
+  const picked = dark ? styles.dark_all : styles.voyager;   // ⚠️ 這行不能少：下面 brokenKey 要用
   const hasKey = cfg ? (cfg.key_present !== false) : false;
   const brokenKey = !picked || /[?&]key=(&|$)/.test(picked);   // key= 後為空或無值
   const noKeyMode = !hasKey || brokenKey;                      // 無金鑰模式（一律走 OSM 退路）
