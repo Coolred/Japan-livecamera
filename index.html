@@ -762,6 +762,7 @@ function boot(feed, cfg, health){
   setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
   setupFabs();                      // ET-EDIT: 搜尋鈕（左上）＋回到全日本（右上）的可見性
   setupDebug();                     // ET-EDIT: 隱藏 debug 面板（?debug=1 或連點新鮮度 5 下）
+  setupZoomWatch();                 // ET-EDIT: 被放大時提示怎麼縮回去（iOS 不會自動縮回）
   buildStats(feed);
   buildFreshness(feed, health);     // ET-EDIT
   buildHealthBar(health);           // ET-EDIT
@@ -1109,6 +1110,36 @@ function setupDebug(){
       if(taps >= 5){ taps = 0; open(); }
     }
   }, true);
+}
+
+/* ET-EDIT ── 被放大時給一條恢復的線索
+   為什麼：iOS 會把頁面放大且**不會自己縮回去**（實機回報「按鈕不見的元凶就是他，
+   自動放大，但沒縮回來」）。最常見的觸發源是「聚焦字級 < 16px 的輸入框」——
+   已用 font-size:16px 修掉（見手機 media query）。但只要還有人放大，就會再遇到。
+
+   一旦放大，position:fixed 的浮動鈕會被推出可見範圍，使用者只覺得「按鈕不見了」，
+   完全不知道發生什麼事。程式**無法**強制把頁面縮回去（瀏覽器禁止），
+   所以至少要講清楚 + 給恢復方法。
+
+   ⚠️ 延遲 2 秒才提示：使用者自己雙指放大常常是「看一下就縮回去」，
+      立刻跳會很吵。同一 session 只提示一次。 */
+function setupZoomWatch(){
+  const vv = window.visualViewport;
+  if(!vv) return;
+  let t = null, hinted = false;
+  const check = () => {
+    clearTimeout(t);
+    if(vv.scale > 1.05){
+      t = setTimeout(() => {
+        if(hinted) return;
+        hinted = true;
+        toast({key:'zoomed', icon:'🔍', title:'畫面被放大了',
+               body:'iOS 放大後不會自動縮回。用雙指在畫面上捏合縮小，浮動按鈕就會回來。'});
+      }, 2000);
+    }
+  };
+  vv.addEventListener('resize', check);
+  vv.addEventListener('scroll', check);
 }
 
 /* ET-EDIT ── 量出「瀏覽器底部工具列」的高度，寫進 CSS 變數 --bh
