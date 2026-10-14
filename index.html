@@ -15,6 +15,40 @@
 <meta http-equiv="Expires" content="0">
 <link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
+<script>
+/* ET-EDIT ── 錯誤捕捉（debug 面板用）【放在 head 最前面，早於任何外部資源】
+   ⚠️ 為什麼一定要在這裡：原本放在主 <script>（body 末端）裡，
+      那就**晚於**上面那三支 unpkg CSS 與底下兩支 unpkg JS ——
+      那些資源若載入失敗或拋錯，事件早就發生完了，根本收不到。
+   ⚠️ JLC_DBG 只能在【一個】script 裡宣告：經典 script 的頂層 const/let
+      共用同一個全域語彙環境，宣告兩次會直接 "has already been declared"。
+      主 script 直接沿用這裡建立的 JLC_DBG 即可。 */
+const JLC_DBG = { errors: [], warns: [], t0: Date.now() };
+window.addEventListener('error', e => {
+  const ts = new Date().toISOString().slice(11, 19);
+  const t = e.target;
+  // 資源（script/link/img）載入失敗時 e.message 是空的、e.target 才是線索。
+  if(t && t !== window && t.tagName && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')){
+    JLC_DBG.errors.push(`[${ts}] 資源載入失敗 <${t.tagName.toLowerCase()}> ${t.src || t.href || '(未知)'}`);
+    return;
+  }
+  // 跨網域腳本拋的錯，瀏覽器只會給 "Script error." 且位置是 :0:0（資訊被刻意遮蔽）。
+  const where = e.filename ? `${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}` : '(無檔名 → 跨網域腳本，資訊被瀏覽器遮蔽)';
+  JLC_DBG.errors.push(`[${ts}] ${e.message} @ ${where}`);
+}, true);   // ⚠️ capture:true 必要 —— 資源載入錯誤不會冒泡
+window.addEventListener('unhandledrejection', e => {
+  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
+});
+/* 圖書館／瀏覽器注入的程式常常只 console.error 不拋錯 —— 一起收起來，
+   否則錯誤清單一片空白、卻在 console 裡罵得很兇。 */
+for(const lv of ['error', 'warn']){
+  const orig = console[lv].bind(console);
+  console[lv] = (...a) => {
+    try{ JLC_DBG[lv === 'error' ? 'errors' : 'warns'].push(`[${new Date().toISOString().slice(11, 19)}] (console.${lv}) ${a.map(x => (x && x.message) || String(x)).join(' ').slice(0, 300)}`); }catch(_){}
+    orig(...a);
+  };
+}
+</script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
@@ -677,33 +711,6 @@
  * 資料來源：data/cameras.json（feed）、data/mapconfig.json（Carto 底圖設定）
  * 合約：feed 欄位名不得變更；Carto 金鑰只從 mapconfig.json 讀取，不寫死於程式碼。 */
 
-/* ET-EDIT ── 早期錯誤捕捉（debug 面板用）
-   ⚠️ 一定要放在**最前面**：boot() 期間的錯誤才是最需要看到的，
-      等到使用者開面板才裝就來不及了。 */
-const JLC_DBG = { errors: [], t0: Date.now() };
-window.addEventListener('error', e => {
-  // ⚠️ 資源（script/link/img）載入失敗時 e.message 是空的、e.target 才是線索
-  //    → 分開處理，否則「Leaflet CDN 掛了」會變成一條無用的空白錯誤。
-  // ⚠️ 必須用 capture:true！資源載入錯誤**不會冒泡**，不加捕捉階段根本收不到
-  //    （listener 要設在 window 且 capture=true 才攔得到）。
-  const t = e.target;
-  if(t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')){
-    const u = t.src || t.href || '(未知)';
-    JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] 資源載入失敗 <${t.tagName.toLowerCase()}> ${u}`);
-    return;
-  }
-  // ⚠️ 跨網域腳本（CDN）拋的錯，瀏覽器只會給 "Script error." 且位置是 :0:0 ——
-  //    看不出所以然。解法是幫 script 標籤加 crossorigin="anonymous"，
-  //    讓 CDN 以 CORS 回應、錯誤才有細節（unpkg 有 access-control-allow-origin: *）。
-  //    若加了仍只拿到 "Script error."，那多半不是我們載入的腳本（見 debug 面板的
-  //    「已載入腳本」區塊 —— 瀏覽器／App 注入的東西會在那裡現形）。
-  const where = e.filename ? `${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}` : '(無檔名 → 跨網域腳本，資訊被瀏覽器遮蔽)';
-  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${where}`);
-}, true);
-window.addEventListener('unhandledrejection', e => {
-  JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
-});
-
 /* ET-EDIT ── 手機版開場先收合面板
    為什麼：手機版面板是底部抽屜，展開時佔 74vh —— 一開站就蓋掉大半地圖，
    根本看不到地圖也不好瀏覽。
@@ -1103,6 +1110,11 @@ function buildDebugLog(){
   L.push('');
   L.push('══ 錯誤 ══');
   L.push(JLC_DBG.errors.length ? JLC_DBG.errors.join('\n') : '(無)');
+  if(JLC_DBG.warns && JLC_DBG.warns.length){
+    L.push('');
+    L.push('══ 警告（console.warn）══');
+    for(const x of JLC_DBG.warns.slice(0, 12)) L.push('  ' + x);
+  }
 
   // 「Script error. @ :0:0」是瀏覽器對**跨網域腳本**的遮蔽（連 crossorigin 也問不出來時）。
   // 把頁面上實際載入的腳本全列出來 —— 如果有瀏覽器／App 偷偷注入的東西，這裡會露出來。
