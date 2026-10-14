@@ -439,6 +439,12 @@
 
   /* ── 響應式：手機版底部抽屜 ────────────────────────── */
   @media (max-width:820px){
+    /* ET-EDIT ⚠️ iOS 會自動放大「font-size < 16px 的輸入框」所在的整個頁面 ——
+       使用者回報「搜尋列會把畫面撐開」就是這個（按搜尋鈕時我們會自動 focus）。
+       16px 是門檻，低於它 Safari 一定 zoom。
+       ⚠️ 不要用 viewport 的 maximum-scale=1 來解：那會連使用者自己的縮放一起擋掉
+          （無障礙問題），而且新版 iOS 不一定理它。 */
+    .search input, .keypop input{font-size:16px}
     .psheetclose{display:grid}
     .panel{
       left:0;right:0;top:auto;width:auto;max-width:none;border-radius:18px 18px 0 0;
@@ -658,6 +664,8 @@ const JLC_DBG = { errors: [], t0: Date.now() };
 window.addEventListener('error', e => {
   // ⚠️ 資源（script/link/img）載入失敗時 e.message 是空的、e.target 才是線索
   //    → 分開處理，否則「Leaflet CDN 掛了」會變成一條無用的空白錯誤。
+  // ⚠️ 必須用 capture:true！資源載入錯誤**不會冒泡**，不加捕捉階段根本收不到
+  //    （listener 要設在 window 且 capture=true 才攔得到）。
   const t = e.target;
   if(t && t !== window && (t.tagName === 'SCRIPT' || t.tagName === 'LINK' || t.tagName === 'IMG')){
     const u = t.src || t.href || '(未知)';
@@ -668,7 +676,7 @@ window.addEventListener('error', e => {
   //    看不出所以然。解法是幫 script 標籤加 crossorigin="anonymous"，
   //    讓 CDN 以 CORS 回應、錯誤才有細節（unpkg 有 access-control-allow-origin: *）。
   JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] ${e.message} @ ${String(e.filename).split('/').pop()}:${e.lineno}:${e.colno}`);
-});
+}, true);
 window.addEventListener('unhandledrejection', e => {
   JLC_DBG.errors.push(`[${new Date().toISOString().slice(11, 19)}] (promise) ${(e.reason && (e.reason.message || e.reason)) || '未知'}`);
 });
@@ -729,7 +737,17 @@ Promise.all([
   fetch('data/mapconfig.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
   // ET-EDIT: 管線健康狀態。**可選檔** —— 不存在（例如公開發佈包）時只是不顯示示警橫幅，不影響其他功能。
   fetch('data/pipeline_health.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null)
-]).then(([feed, cfg, health]) => { JLC.data = feed; JLC.mapconfig = cfg; JLC.health = health; boot(feed, cfg, health); })
+]).then(([feed, cfg, health]) => {
+  JLC.data = feed; JLC.mapconfig = cfg; JLC.health = health;
+  // ⚠️ 包 try/catch：boot() 拋錯時，跨網域腳本之外的錯會自動被 onerror 抓到，
+  //    但**這裡補上堆疊**，debug 面板才看得出是哪一行（光靠 onerror 只有檔名行號）。
+  try {
+    boot(feed, cfg, health);
+  } catch (err) {
+    JLC_DBG.errors.push(`[boot] ${err && err.message}\n${String((err && err.stack) || '').split('\n').slice(0, 4).join('\n')}`);
+    throw err;
+  }
+})
   .catch(err => {
     console.error('無法載入資料', err);
     $('#stats').innerHTML = '<span class="chip offline">資料載入失敗</span>';
@@ -1015,6 +1033,9 @@ function buildDebugLog(){
   L.push(`computed            max-height=${cs(panel,'max-height')} display=${cs(panel,'display')} bottom=${cs(panel,'bottom')}`);
   L.push(`panelClose 顯示      ${cs($('#panelClose'),'display')}`);
   L.push(`判定 mobile          ${innerWidth <= 820}（門檻 820）`);
+  // iOS 會在「輸入框字級 < 16px」時自動放大整個頁面 —— 量出來才驗得到有沒有踩到
+  L.push(`搜尋框字級           ${cs($('#q'),'font-size')}（< 16px 會被 iOS 自動放大）`);
+  L.push(`金鑰框字級           ${cs($('#keyInput'),'font-size')}`);
 
   L.push('');
   L.push('══ 浮動按鈕 ══');
