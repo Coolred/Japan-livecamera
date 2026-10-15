@@ -13,7 +13,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
-<link rel="preconnect" href="https://basemaps.cartocdn.com" crossorigin>
+<link rel="preconnect" href="https://tile.openstreetmap.org" crossorigin>
 <link rel="preconnect" href="https://unpkg.com" crossorigin>
 <script>
 /* ET-EDIT ── 錯誤捕捉（debug 面板用）【放在 head 最前面，早於任何外部資源】
@@ -310,23 +310,6 @@ for(const lv of ['error', 'warn']){
   .fab:active{transform:scale(.94)}
   .fab svg{width:20px;height:20px}
   .fab[hidden]{display:none}
-  /* ET-EDIT: 自備 Carto 金鑰的輸入框（只存瀏覽器，不上傳） */
-  .keypop{position:fixed;right:18px;top:72px;width:290px;z-index:960;
-    background:#fff;border-radius:14px;box-shadow:0 18px 50px rgba(10,25,45,.3);
-    padding:13px 14px;font-size:12px;display:none;border:1px solid var(--line)}
-  .keypop.show{display:block}
-  .keypop h4{margin:0 0 5px;font-size:13px;color:var(--ink)}
-  .keypop .hint{color:var(--muted);font-size:11px;line-height:1.5;margin-bottom:9px}
-  .keypop input{width:100%;box-sizing:border-box;padding:8px 10px;border-radius:9px;
-    border:1px solid var(--line);font:inherit;font-size:12px;background:#f8fafc;color:var(--ink)}
-  .keypop input:focus{outline:2px solid rgba(214,69,90,.35);outline-offset:1px}
-  .keypop .act{display:flex;gap:7px;margin-top:9px}
-  .keypop .act button{flex:1;padding:7px 0;border-radius:9px;border:0;cursor:pointer;
-    font:inherit;font-size:12px;font-weight:600;background:var(--accent);color:#fff}
-  .keypop .act button.ghost{background:rgba(15,30,50,.07);color:var(--ink-2)}
-  .keypop .st{margin-top:7px;font-size:11px;line-height:1.45}
-  .keypop .st.ok{color:#04693b} .keypop .st.no{color:var(--muted)}
-  @media (max-width:640px){ .keypop{right:14px;top:64px;width:calc(100vw - 28px)} }
   /* ET-EDIT: Toast —— 通用浮動通知（右下堆疊、由右滑入、不擋操作）
      第一個使用者：版本更新提示。其他通知可直接沿用 .toast 這個結構。 */
   .toasts{position:fixed;right:18px;bottom:18px;z-index:3200;display:flex;
@@ -373,16 +356,6 @@ for(const lv of ['error', 'warn']){
     .searchfab svg{width:16px;height:16px}
     .searchfab:active{transform:scale(.97)}
   }
-
-  /* ET-EDIT: 金鑰彈窗的申請連結 */
-  .keypop a{color:var(--accent);text-decoration:none;font-weight:600;
-    border-bottom:1px solid rgba(214,69,90,.35)}
-  .keypop a:hover{border-bottom-color:var(--accent)}
-  .keypop code{background:rgba(15,30,50,.06);padding:1px 4px;border-radius:4px;
-    font-size:10.5px;font-family:ui-monospace,Menlo,monospace}
-  .keypop .links{display:flex;flex-direction:column;gap:3px;margin:7px 0 2px}
-  .keypop .warn2{color:#8a4b00;background:rgba(232,166,60,.13);border-radius:8px;
-    padding:6px 8px;margin-bottom:8px;font-size:11px;line-height:1.5}
 
   /* ET-EDIT: 手機版面板的「收合」鈕 —— 光靠頂端那條小把手太不明顯，
      使用者回報「找不到關閉的方式」。 */
@@ -493,7 +466,7 @@ for(const lv of ['error', 'warn']){
        16px 是門檻，低於它 Safari 一定 zoom。
        ⚠️ 不要用 viewport 的 maximum-scale=1 來解：那會連使用者自己的縮放一起擋掉
           （無障礙問題），而且新版 iOS 不一定理它。 */
-    .search input, .keypop input{font-size:16px}
+    .search input{font-size:16px}
     .psheetclose{display:grid}
     .panel{
       left:0;right:0;top:auto;width:auto;max-width:none;border-radius:18px 18px 0 0;
@@ -656,38 +629,6 @@ for(const lv of ['error', 'warn']){
     </svg>
     <span class="badge" id="alertBadge"></span>
   </button>
-  <button id="btnBase" title="切換底圖（Voyager / 深色）" aria-label="切換底圖">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M12 3l9 5-9 5-9-5 9-5z"></path><path d="M3 13l9 5 9-5"></path><path d="M3 17l9 5 9-5"></path>
-    </svg>
-  </button>
-  <!-- ET-EDIT: 自備 CARTO API key（只存這台瀏覽器，不上傳；本頁無後端） -->
-  <button id="btnKey" title="使用自己的 CARTO API key" aria-label="CARTO API key 設定">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
-      <circle cx="7.5" cy="15.5" r="4.4"></circle><path d="M10.6 12.4L21 2"></path><path d="M17.2 5.8l2.6 2.6"></path>
-    </svg>
-  </button>
-  <div class="keypop" id="keypop" role="dialog" aria-label="CARTO API key 設定">
-    <h4>底圖金鑰（CARTO API key）</h4>
-    <div class="warn2" id="keyWarn" hidden>
-      此站<b>沒有內建金鑰</b> → 底圖會顯示 <code>API KEY REQUIRED</code> 浮水印。
-      填一組免費金鑰即可恢復正常。
-    </div>
-    <div class="hint">
-      金鑰<b>免費、免註冊帳號</b>，填 email 一分鐘內收到。
-      <div class="links">
-        <a href="https://carto.com/basemaps/apikey/" target="_blank" rel="noopener noreferrer">→ 申請免費 API key</a>
-        <a href="https://dashboard.basemaps.carto.com/" target="_blank" rel="noopener noreferrer">→ 管理／查詢用量</a>
-      </div>
-      金鑰<b>只存在這台瀏覽器</b>（localStorage），不會上傳到任何地方 —— 本頁沒有後端。
-    </div>
-    <input id="keyInput" type="password" placeholder="貼上 CARTO API key" autocomplete="off" spellcheck="false" aria-label="CARTO API key">
-    <div class="act">
-      <button id="keySave" type="button">儲存並套用</button>
-      <button id="keyClear" type="button" class="ghost">清除</button>
-    </div>
-    <div class="st" id="keySt"></div>
-  </div>
   </div><!-- /.tools -->
 
 <!-- 系統通知彈窗：與機位 modal 分開，避免互相干擾
@@ -737,8 +678,8 @@ for(const lv of ['error', 'warn']){
 <script>
 "use strict";
 /* 日本即時影像地圖 — 單頁前端
- * 資料來源：data/cameras.json（feed）、data/mapconfig.json（Carto 底圖設定）
- * 合約：feed 欄位名不得變更；Carto 金鑰只從 mapconfig.json 讀取，不寫死於程式碼。 */
+ * 資料來源：data/cameras.json（feed）。底圖用 OpenStreetMap 官方圖磚（免金鑰、無後端）。
+ * 合約：feed 欄位名不得變更。 */
 
 /* ET-EDIT ── 手機版開場先收合面板
    為什麼：手機版面板是底部抽屜，展開時佔 74vh —— 一開站就蓋掉大半地圖，
@@ -793,15 +734,17 @@ Promise.all([
   //   ⚠️ 不用預設值：公開站（GitHub Pages）回 max-age=600，10 分鐘內連問都不問 → 看到舊資料。
   //   兩邊實測都支援 304（0 bytes）→ no-cache 是新鮮與省流量兼得。
   fetch('data/cameras.json', {cache:'no-cache'}).then(r => { if(!r.ok) throw new Error('cameras.json '+r.status); return r.json(); }),
-  fetch('data/mapconfig.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null),
+  // ET-EDIT（2026-10-15）：**不再讀 data/mapconfig.json** —— 底圖已改為 OpenStreetMap，
+  //   前端完全不需要任何金鑰或樣式設定（這正是移除 CARTO 的主要收益之一）。
+  //   檔案仍由管線產生，保留供其他用途；前端不再依賴它。
   // ET-EDIT: 管線健康狀態。**可選檔** —— 不存在（例如公開發佈包）時只是不顯示示警橫幅，不影響其他功能。
   fetch('data/pipeline_health.json', {cache:'no-cache'}).then(r => r.ok ? r.json() : null).catch(() => null)
-]).then(([feed, cfg, health]) => {
-  JLC.data = feed; JLC.mapconfig = cfg; JLC.health = health;
+]).then(([feed, health]) => {
+  JLC.data = feed; JLC.health = health;
   // ⚠️ 包 try/catch：boot() 拋錯時，跨網域腳本之外的錯會自動被 onerror 抓到，
   //    但**這裡補上堆疊**，debug 面板才看得出是哪一行（光靠 onerror 只有檔名行號）。
   try {
-    boot(feed, cfg, health);
+    boot(feed, health);
   } catch (err) {
     JLC_DBG.errors.push(`[boot] ${err && err.message}\n${String((err && err.stack) || '').split('\n').slice(0, 4).join('\n')}`);
     throw err;
@@ -813,11 +756,10 @@ Promise.all([
     $('#list').innerHTML = '<div class="empty">無法載入 <b>data/cameras.json</b>。<br>請以靜態伺服器開啟本頁（例如 <code>python3 -m http.server</code>）。</div>';
   });
 
-function boot(feed, cfg, health){
+function boot(feed, health){
   JLC.total = (feed.cameras || []).length;
   stripBust();                      // ET-EDIT: 把 reloadFresh() 的時間戳從網址列拿掉
-  buildMap(cfg);
-  bindKeyPop();                     // ET-EDIT: 自備 CARTO 金鑰（需 buildMap 之後，map 已存在）
+  buildMap();
   setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
   setupFabs();                      // ET-EDIT: 搜尋鈕（左上）＋回到全日本（右上）的可見性
   setupDebug();                     // ET-EDIT: 隱藏 debug 面板（?debug=1 或連點新鮮度 5 下）
@@ -884,85 +826,6 @@ function buildHealthBar(health){
   el.innerHTML = '<span class="ic">' + (isErr ? '🚨' : '⚠️') + '</span>'
     + '<span class="tx"><b>資料管線有狀況</b><br>' + esc(health.issues.join('\n')).replace(/\n/g,'<br>') + '</span>';
   el.hidden = false;
-}
-
-/* ET-EDIT ── 自備 CARTO API key ────────────────────────────
-   為什麼：預設底圖走免金鑰 CDN（能看，但品質／額度受限）。讓使用者能填自己的 key。
-
-   ⚠️ 只存在這台瀏覽器的 localStorage，**不上傳**。
-      本頁是純靜態、沒有任何後端可以接收它 —— 這是設計上的保證，不只是承諾。
-
-   ⚠️ 無痕模式／停用 storage 時 localStorage 會丟例外，所以全部包 try。
-      包了才不會「只是不能存」卻讓整個頁面掛掉。 */
-const KEY_STORE = 'jlc.carto.key';
-function cartoKey(){
-  try { return localStorage.getItem(KEY_STORE) || ''; } catch(e){ return ''; }
-}
-function setCartoKey(v){
-  try { v ? localStorage.setItem(KEY_STORE, v) : localStorage.removeItem(KEY_STORE); }
-  catch(e){ /* 無痕模式：無法持久化，本次 session 仍可用 */ }
-}
-function keyStatus(kind, msg){
-  const el = $('#keySt'); if(!el) return;
-  el.className = 'st ' + (kind === 'ok' ? 'ok' : 'no');
-  el.textContent = msg || '';
-}
-function bindKeyPop(){
-  const pop = $('#keypop'), inp = $('#keyInput'), btn = $('#btnKey');
-  if(!pop || !btn) return;
-
-  const refresh = () => {
-    const has = !!cartoKey();
-    const siteHas = !!(JLC.mapconfig && JLC.mapconfig.key_present !== false);
-    // 沒有站方金鑰、使用者也還沒填 → 底圖是浮水印圖，按鈕要示警
-    const needKey = !siteHas && !has;
-    btn.classList.toggle('has-warn', needKey);
-    btn.title = needKey
-      ? '底圖缺金鑰（顯示浮水印）→ 點此填一組免費的 CARTO API key'
-      : (has ? 'CARTO API key：已設定（只存在你的瀏覽器）' : '底圖金鑰設定');
-    const w = $('#keyWarn');
-    if(w) w.hidden = !needKey;
-  };
-  refresh();
-
-  btn.addEventListener('click', () => {
-    const show = !pop.classList.contains('show');
-    pop.classList.toggle('show', show);
-    if(show){
-      inp.value = '';
-      keyStatus('', cartoKey() ? '目前已有自備金鑰（基於安全，不回填內容）。' : '');
-      inp.focus();
-    }
-  });
-
-  $('#keySave').addEventListener('click', () => {
-    const v = inp.value.trim();
-    if(!v){ keyStatus('no', '請先貼上金鑰，或按「清除」。'); return; }
-    setCartoKey(v);
-    JLC._keyChecked = false;                        // 重新允許一次無效偵測
-    applyBasemap(JLC.mapconfig, JLC.dark);
-    keyStatus('ok', '已套用。金鑰只留在這台瀏覽器，重新載入後仍有效。');
-    refresh();
-    inp.value = '';
-  });
-
-  $('#keyClear').addEventListener('click', () => {
-    setCartoKey('');
-    JLC._keyChecked = false;
-    applyBasemap(JLC.mapconfig, JLC.dark);
-    keyStatus('ok', '已清除，回到免金鑰底圖。');
-    refresh();
-    inp.value = '';
-  });
-
-  // 點外面關閉（Esc 也可以）
-  document.addEventListener('click', e => {
-    if(pop.classList.contains('show') && !pop.contains(e.target) && !btn.contains(e.target))
-      pop.classList.remove('show');
-  });
-  document.addEventListener('keydown', e => {
-    if(e.key === 'Escape') pop.classList.remove('show');
-  });
 }
 
 /* ET-EDIT ── Toast（通用浮動通知）─────────────────────────
@@ -1111,7 +974,6 @@ function buildDebugLog(){
   L.push(`判定 mobile          ${innerWidth <= 820}（門檻 820）`);
   // iOS 會在「輸入框字級 < 16px」時自動放大整個頁面 —— 量出來才驗得到有沒有踩到
   L.push(`搜尋框字級           ${cs($('#q'),'font-size')}（< 16px 會被 iOS 自動放大）`);
-  L.push(`金鑰框字級           ${cs($('#keyInput'),'font-size')}`);
 
   L.push('');
   L.push('══ 浮動按鈕 ══');
@@ -1158,9 +1020,7 @@ function buildDebugLog(){
   L.push(`圖磚主機              ${Object.keys(hosts).length ? JSON.stringify(hosts) : '(還沒載到)'}`);
   const sample = tiles[0] ? String(tiles[0].src).replace(/^https?:\/\/[^/]+/, '').replace(/[?&]key=[^&]*/gi, '') : '';
   if(sample) L.push(`圖磚範例路徑          ${sample}`);
-  L.push(`noKeyMode            ${J.noKeyMode}`);
-  L.push(`mapconfig            ${J.mapconfig ? `有（key_present=${J.mapconfig.key_present}）` : '無（公開站正常）'}`);
-  L.push(`自備金鑰              ${(() => { try { return localStorage.getItem('jlc.carto.key') ? '有' : '無'; } catch(e){ return '讀不到'; } })()}`);
+  L.push(`底圖                 OpenStreetMap（2026-10-15 起已移除 CARTO）`);
   L.push(`marker/cluster       ${document.querySelectorAll('.marker-cluster,.leaflet-marker-icon').length}`);
   L.push(`筆數 / 已渲染         ${J.total || '-'} / ${J.rendered || '-'}`);
 
@@ -1470,10 +1330,12 @@ function setupUpdateWatch(){
   });
 }
 
-/* ── 地圖與底圖（Carto）────────────────────────────────── */
-function buildMap(cfg){
+/* ── 地圖 ──────────────────────────────────────────────
+   ⚠️ 這裡的 maxZoom 只是初始值 —— 真正的上限由 applyBasemap() 依圖磚層
+      「算完之後的 maxZoom」覆寫（Leaflet 的 detectRetina 會偷改，見該函式說明）。 */
+function buildMap(){
   const map = L.map('map', {
-    zoomControl:false, worldCopyJump:true, minZoom:4, maxZoom:(cfg && cfg.max_zoom) || 18,
+    zoomControl:false, worldCopyJump:true, minZoom:4, maxZoom:19,
     preferCanvas:false, attributionControl:true
   }).setView([37.6, 137.8], 5);
   JLC.map = map;
@@ -1497,7 +1359,7 @@ function buildMap(cfg){
     }
   });
   map.addControl(new ZoomLvl());
-  applyBasemap(cfg, false);
+  applyBasemap();
 
   // markercluster：733 個 marker 的效能關鍵
   const cluster = L.markerClusterGroup({
@@ -1529,110 +1391,57 @@ function buildMap(cfg){
   map.on('moveend zoomend', updateVisibleHint);
 }
 
-function applyBasemap(cfg, dark){
+/* ET-EDIT ── 底圖：**只用 OpenStreetMap**（使用者 2026-10-15 定案，移除 CARTO）
+   為什麼移除 CARTO（使用者原話）：「carto 地圖沒有太多標示，OSM 有店家跟路名，
+   雖然不清楚，但至少有資訊可辨識」——
+   Voyager 本來就是設計成「低調、不搶資料」的底圖，在「辨識這是哪裡」上反而吃虧。
+   CARTO 另外的優勢（retina @2x、深色版）實測下來不敵「有店名路名」這個實際需求。
+
+   ⚠️ OSM 圖磚政策（https://operations.osmfoundation.org/policies/tiles/）必須遵守：
+     · 只能用 `https://tile.openstreetmap.org/{z}/{x}/{y}.png`（別的子網域可能被撤）
+     · 一定要顯示 `© OpenStreetMap contributors` 授權標示，且**不可被 UI 遮住**
+     · **不可**批次下載／預抓／做離線圖磚（我們只抓畫面上看得到的 ✅）
+     · **不可**預設送 `no-cache` 標頭、**不可**設 Referrer-Policy 擋掉 Referer
+     · 可用性是 best-effort（無 SLA）；**哪天變成公開熱門站就必須換掉**
+     · 官方「建議」：不要把圖磚網址寫死（所以放常數）、加一個「回報地圖問題」連結 */
+const OSM_TILE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+const OSM_MAX = 19;          // 實測 z19 有、z20 回 400
+
+function applyBasemap(){
   const map = JLC.map;
   if(JLC.tile){ map.removeLayer(JLC.tile); JLC.tile = null; }
-  const styles = (cfg && cfg.styles) || {};
-  // ── 金鑰有無的自動回退（使用者要求）──────────────────────────
-  // 管線以 CARTO_API_KEY 環境變數注入金鑰；未設定時 mapconfig.json 的
-  // styles.* 會是「無金鑰 URL」，但那個 URL 仍可能被寫成含空 key= 參數。
-  // 這裡做雙重保險：
-  //   ① key_present 明確為 false → 直接走免金鑰 CDN
-  //   ② styles.* 內容含空的 key=（key= 後面沒東西）→ 視為無金鑰
-  // 目的：未來要公開發佈時，只要不帶環境變數，前端就自動切到免金鑰模式，
-  //       不需改任何程式或設定檔。
-  // ET-EDIT（2026-10-14）⚠️ Carto 的「免金鑰 CDN」已經死了
-  //   Carto 現在要求圖磚一定要帶 key：無 key／空 key／亂碼 key 都回同一個
-  //   2049 bytes 的「API KEY REQUIRED」佔位圖（真 key 是 4289B，實測同位置 z13）。
-  //   原本這裡指向 Carto 免金鑰 URL → 公開站（發佈包不含 mapconfig.json）整張地圖
-  //   變成浮水印，等同沒有底圖。
-  //   改用**真正免金鑰**的 OpenStreetMap 標準圖磚（實測 6555B、無浮水印）。
-  //   ⚠️ OSM 沒有深色版 → 深色切換在免金鑰模式下無效，改以 toast 告知（見 btnBase）。
-  const NOKEY = {
-    voyager:  'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    dark_all: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'
-  };
-  const picked = dark ? styles.dark_all : styles.voyager;   // ⚠️ 這行不能少：下面 brokenKey 要用
-  const hasKey = cfg ? (cfg.key_present !== false) : false;
-  const brokenKey = !picked || /[?&]key=(&|$)/.test(picked);   // key= 後為空或無值
-  const noKeyMode = !hasKey || brokenKey;                      // 無金鑰模式（一律走 OSM 退路）
-  const base = dark ? NOKEY.dark_all : NOKEY.voyager;
 
-  // 沒有 mapconfig（＝公開站）時，若使用者自備金鑰，仍然要指向 Carto —— 用預設樣式 URL。
-  const CARTO_DEFAULT = {
-    voyager:  'https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',
-    dark_all: 'https://{s}.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}{r}.png'
-  };
-  // 把 URL 上既有的 key= 拿掉再掛新的（避免出現兩個 key 參數，讓使用者的金鑰勝出）
-  function withKey(u, k){
-    u = u.replace(/([?&])key=[^&]*/g, '$1').replace(/[?&]+$/, '');
-    return u + (u.indexOf('?') >= 0 ? '&' : '?') + 'key=' + encodeURIComponent(k);
-  }
-
-  // ET-EDIT 優先序：① 使用者自備金鑰（只存在自己的瀏覽器）→ Carto
-  //                ② mapconfig 提供的金鑰                    → Carto
-  //                ③ 都沒有                                  → OSM（免金鑰，非 Carto！）
-  //   ⚠️ ③ 不能再用 Carto：無 key 只會拿到「API KEY REQUIRED」佔位圖。
-  const uKey = cartoKey();
-  const cartoPick = (picked && !brokenKey) ? picked : (dark ? CARTO_DEFAULT.dark_all : CARTO_DEFAULT.voyager);
-  const url = uKey
-    ? withKey(cartoPick, uKey)
-    : (noKeyMode ? base : picked);
-
-  /* ET-EDIT ⚠️ maxZoom 要先「預加 1」—— 這是「z18 灰底」的真因。
+  /* ⚠️ maxZoom 要先「預加 1」—— 這是「z18 灰底」的真因。
      Leaflet 的 detectRetina 在 retina 裝置上會**自己**做三件事（原始碼實測符合）：
        options.tileSize  = Math.floor(tileSize / 2);      // 256 → 128
        options.zoomOffset++;                              //   0 → 1
        options.maxZoom   = Math.max(0, maxZoom - 1);      //  18 → 17
-     但它只改「圖層」的 maxZoom，**地圖本身的 maxZoom 不變**（仍是 18）。
+     但它只改「圖層」的 maxZoom，**地圖本身的 maxZoom 不變**。
      → 使用者可以縮到 z18，而圖層的 tileZoom 已超過自己的 maxZoom
        → Leaflet 判定該層無效 → **一張圖磚都不產生** → 使用者看到灰底。
-     （實機 log：地圖/圖磚/URL = 18/18/19，但圖層 maxZoom=17 → 灰底。）
-     所以照原值傳的話，retina 手機的實際上限定會少一層。 */
-  const wantMax  = (cfg && cfg.max_zoom) || ((uKey || !noKeyMode) ? 19 : 18);
-  //   ↑ 沒有 mapconfig（公開站）時的預設值要看走哪條路：
-  //     · 走 Carto（自備金鑰 / mapconfig）→ 實測到 z20 都還有真實圖磚 → 敢給 19
-  //     · 走 OSM（免金鑰）              → 實測 z19 有、z20 回 HTTP 錯誤 → 只給 18
-  //       （因為 retina 的 zoomOffset+1 會讓實際請求的 URL 層再多一層）
-  const retinaOn = ((cfg && cfg.retina) !== false) && !!(window.L && L.Browser && L.Browser.retina);
+
+     detectRetina 對 OSM 還有一個好處：它會讓 Leaflet 去要**深一層**的圖磚再縮小畫，
+     在 retina 上一樣會比較銳利（OSM 沒有 {r}/@2x，那個效果靠這招達到）。
+     代價是地圖上限少一層、圖磚數多 4 倍。 */
+  const retinaOn = !!(window.L && L.Browser && L.Browser.retina);
+  const wantMax  = retinaOn ? OSM_MAX - 1 : OSM_MAX;   // 兩種裝置最後都會停在「URL 層 = z19」
   const layerMax = retinaOn ? wantMax + 1 : wantMax;   // 抵銷 Leaflet 內部會減掉的那 1
 
-  JLC.tile = L.tileLayer(url, {
-    // OSM 不用 {s} 子網域（已不建議）；Carto 用 abcd。
-    subdomains: (uKey || !noKeyMode) ? ((cfg && cfg.subdomains) || 'abcd') : '',
+  JLC.tile = L.tileLayer(OSM_TILE, {
+    subdomains:'',                 // OSM 不用 {s} 子網域（官方已不建議）
     maxZoom: layerMax,
-    // maxNativeZoom：圖磚實際可用的最高層級。超過時 Leaflet 會**放大既有圖磚**
-    // 而非向伺服器要更高層級（那會拿到灰底佔位圖）。
-    // 實測：Carto 在 z20 的鄉村地區已是灰底（石垣島 z20=2599B、奥尻島全層級 103B）。
-    maxNativeZoom:(cfg && cfg.max_native_zoom) || 18,
-    detectRetina:(cfg && cfg.retina) !== false,
-    attribution: (noKeyMode && !uKey)
-      ? '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-      : ((cfg && cfg.attribution) || '&copy; OpenStreetMap contributors &copy; CARTO'),
-    crossOrigin:true
+    maxNativeZoom: OSM_MAX,
+    detectRetina: true,
+    /* ⚠️ 授權標示不可省略、不可被 UI 遮住（OSM 政策硬性要求）。
+       後面的「回報地圖問題」是政策「建議」項目（fixthemap）—— 加在標示列最自然。 */
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
+      + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>',
+    crossOrigin: true
   }).addTo(map);
-  JLC.noKeyMode = noKeyMode && !uKey;
 
-  /* ET-EDIT: 地圖的縮放上限一律跟圖層對齊 —— 讀圖層**算完之後**的值，不寫死數字。
-     為什麼一定要做：切換底圖（深色／換金鑰）會重建圖層，而圖層的 maxZoom
-     會隨裝置是否 retina 而不同（見上）。只要地圖能縮到圖層產生不出圖磚的層級，
-     使用者就會看到灰底。這裡把兩者綁死，任何情況下都不會出現「可縮但沒圖」。
-     ⚠️ 用 setMaxZoom(層的值) 而不是 setMaxZoom(常數)：Leaflet 內部還會再調整一次。 */
+  /* 地圖的縮放上限一律跟圖層對齊 —— 讀圖層**算完之後**的值，不寫死數字。
+     只要地圖能縮到圖層產生不出圖磚的層級，使用者就會看到灰底。 */
   map.setMaxZoom(JLC.tile.options.maxZoom);
-
-  // ET-EDIT: 自備金鑰若無效（會被 Carto 擋），使用者只會看到灰底卻不知原因 → 主動提示。
-  //   只在「有自備金鑰」時掛，且同一 session 只提示一次，不洗版。
-  if(uKey && !JLC._keyChecked){
-    let errs = 0;
-    JLC.tile.on('tileerror', () => {
-      if(++errs >= 3 && !JLC._keyChecked){
-        JLC._keyChecked = true;
-        keyStatus('invalid', '金鑰似乎無效（圖磚載入失敗）。已自動回退免金鑰底圖。');
-        setCartoKey('');                       // 清掉壞的，避免每次重載都失敗
-        applyBasemap(JLC.mapconfig, JLC.dark);
-      }
-    });
-  }
 }
 
 /* ── 統計 ─────────────────────────────────────────────── */
@@ -1836,15 +1645,6 @@ function bindControls(){
     render(true);
   });
 
-  $('#btnBase').addEventListener('click', () => {
-    JLC.dark = !JLC.dark;
-    applyBasemap(JLC.mapconfig, JLC.dark);
-    // ET-EDIT: 免金鑰模式走 OSM，沒有深色版 → 明確告知，別讓使用者以為切換壞了
-    if(JLC.noKeyMode && JLC.dark){
-      toast({key:'darknokey', icon:'🎨', title:'深色底圖需要金鑰',
-        body:'目前是免金鑰的 OpenStreetMap 圖磚，只有一種樣式。填一組 CARTO API key 即可切換深色。'});
-    }
-  });
   $('#btnReset').addEventListener('click', () => JLC.map.flyTo([37.6, 137.8], 5, {duration:.6}));
   $('#handle').addEventListener('click', () => $('#panel').classList.toggle('collapsed'));
 
