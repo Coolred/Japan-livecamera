@@ -386,15 +386,6 @@ for(const lv of ['error', 'warn']){
   #dbgText{margin:0;padding:12px;overflow:auto;font-size:11px;line-height:1.6;
     white-space:pre-wrap;word-break:break-all;-webkit-overflow-scrolling:touch;flex:1}
 
-  /* ET-EDIT: Leaflet 縮放控制（預設在右下）
-     ⚠️ 純顯示的縮放層數指示 —— 不要套 .leaflet-bar（那是給可按按鈕群的樣式） */
-  .jlc-zlvl{
-    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;
-    padding:3px 7px;font:600 11.5px/1.25 ui-monospace,Menlo,Consolas,monospace;
-    color:var(--ink-2);box-shadow:0 2px 8px rgba(10,25,45,.14);
-    cursor:default;-webkit-user-select:none;user-select:none;text-align:center
-  }
-
   .mobile-handle{display:none}
 
   /* ── 彈出視窗（Popup）──────────────────────────────── */
@@ -529,30 +520,16 @@ for(const lv of ['error', 'warn']){
     .leaflet-bottom.leaflet-right .leaflet-control-zoom{
       position:fixed;left:14px;top:62px;right:auto;bottom:auto;margin:0
     }
-    /* ET-EDIT: 縮放層數指示跟著縮放鈕搬到左上，排在它下面。
-       134px = 62(縮放鈕上緣) + 64(縮放鈕高) + 8(間隙)。
-       兩個是成對的，搬家要一起搬，不然會一個在左上一個在右下。 */
-    .leaflet-bottom.leaflet-right .jlc-zlvl{
-      position:fixed;left:14px;top:134px;right:auto;bottom:auto;margin:0
-    }
     .box{width:100%;max-height:92vh;max-height:92dvh}
-  }
-
-  /* ── 桌機版：縮放層數改放縮放鈕【左側】────────────────
-     ⚠️ 不要留在 Leaflet 預設的堆疊位置（縮放鈕上方）：
-        那裡會撞到右下角的「回到預設位置」浮動鈕
-        （FAB 在 bottom 96~140、Leaflet 堆疊的指示在 98~120 → 完全重疊）。
-        放左側後右下的垂直堆疊只剩「FAB + 縮放鈕」兩個，兩者已互不衝突。
-        right:50px = 14(邊距) + 34(縮放鈕寬) + 2(間隙)；bottom:24px 與縮放鈕下緣對齊。 */
-  @media (min-width:821px){
-    .leaflet-bottom.leaflet-right .jlc-zlvl{
-      position:fixed;right:50px;bottom:24px;left:auto;top:auto;margin:0
-    }
   }
 </style>
 </head>
 <body>
 <div id="map" role="application" aria-label="日本即時影像地圖"></div>
+
+<!-- ET-EDIT（2026-10-15）：Toast 容器放在 body 最上層（詳見下方 .panel 內的註解：
+     它原本在 .panel 裡，被面板的 overflow:hidden ＋ backdrop-filter 裁掉又跟著隱藏）。 -->
+<div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
 
 <!-- ET-EDIT: 手機版搜尋鈕（只在抽屜收合時出現，桌面版隱藏） -->
 <button class="searchfab" id="searchFab" type="button" aria-label="開啟搜尋" hidden>
@@ -587,13 +564,17 @@ for(const lv of ['error', 'warn']){
       </div>
     </div>
     <div class="stats" id="stats"></div>
-  </div>
+    </div>
 
-  <!-- ET-EDIT: 管線健康示警橫幅（讀 data/pipeline_health.json；無檔案或正常時隱藏） -->
-  <div class="warnbar" id="warnbar" role="status" hidden></div>
+    <!-- ET-EDIT: 管線健康示警橫幅（讀 data/pipeline_health.json；無檔案或正常時隱藏） -->
+    <div class="warnbar" id="warnbar" role="status" hidden></div>
 
-  <!-- ET-EDIT: Toast 容器（通用浮動通知；目前用於版本更新提示） -->
-  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+    <!-- ⚠️ ET-EDIT（2026-10-15）：Toast 容器**一定要放在面板外面**。
+       它原本在 .panel 內，而 .panel 有 overflow:hidden ＋ backdrop-filter ——
+       backdrop-filter 會讓 position:fixed 的子元素改以「面板」為基準並被裁切，
+       不是以視窗為基準。結果：面板一隱藏 toast 就跟著不見、面板開著則被裁掉
+       （使用者實測回報「toast 被蓋住，只露出一小角」）。
+       移到 body 層後，fixed 定位與 3200 的 z-index 才真的對整個視窗生效。 -->
 
   <div class="controls">
     <div class="search" id="searchWrap">
@@ -844,7 +825,13 @@ function toast(opt){
   const box = $('#toasts');
   if(!box) return null;
   const o = opt || {};
-  if(o.key && box.querySelector('[data-toast-key="' + o.key + '"]')) return null;  // 同 key 不重複堆
+  if(o.key){
+    const dup = box.querySelector('[data-toast-key="' + o.key + '"]');
+    /* ET-EDIT（2026-10-15）：同 key 不重複堆 —— 但如果那一個還卡在「沒 .show」的狀態
+       （例如建立當時分頁在背景，requestAnimationFrame 根本不跑），
+       就直接把它放出來，而不是 return null 讓它永遠卡在畫面外。 */
+    if(dup){ dup.classList.add('show'); return dup; }
+  }
 
   const el = document.createElement('div');
   el.className = 'toast';
@@ -889,7 +876,14 @@ function toast(opt){
 
   el.append(ic, tl, x);
   box.appendChild(el);
-  requestAnimationFrame(() => el.classList.add('show'));   // 進場動畫需要先有一幀
+  /* ⚠️ 進場動畫需要「先有一幀」讓瀏覽器算好初始 transform（translateX(120%)），
+     否則 .show 會和初始值在同一幀內被套用 → 過渡不觸發 → toast 永遠停在畫面右邊外。
+     ⚠️ 不能只靠 requestAnimationFrame：**分頁在背景／被凍結時 rAF 根本不跑**，
+        toast 就會永遠卡在初始位置（實測踩過）。所以補一個 setTimeout 保險。
+     兩個都呼叫是安全的 —— classList.add 是幂等的。 */
+  const show = () => el.classList.add('show');
+  requestAnimationFrame(() => requestAnimationFrame(show));
+  setTimeout(show, 120);
   return el;
 }
 
@@ -992,8 +986,6 @@ function buildDebugLog(){
   const zoom = $('.leaflet-control-zoom');
   L.push(`縮放鈕 .leaflet-control-zoom`);
   L.push(`  ${r(zoom)}  position=${cs(zoom,'position')} left=${cs(zoom,'left')} top=${cs(zoom,'top')} z=${cs(zoom,'z-index')}`);
-  const zl = $('.jlc-zlvl');
-  L.push(`縮放層數 ${zl ? zl.textContent : '(不存在)'}  ${r(zl)}  position=${cs(zl,'position')}`);
 
   L.push('');
   L.push('══ 地圖 ══');
@@ -1350,24 +1342,9 @@ function buildMap(){
   JLC.map = map;
   L.control.zoom({position:'bottomright'}).addTo(map);
 
-  /* ET-EDIT ── 顯示目前縮放層數（z4 ~ z18）
-     為什麼用 Leaflet 原生 control 而不是自己做浮動 div：
-       ① 位置交給 Leaflet 排 —— 會自動跟縮放鈕在同一個角落堆疊，不用自己算座標
-       ② 手機版再由 CSS 把它跟縮放鈕一起搬到左上（見媒體查詢），維持成對
-     ⚠️ 不要套 `leaflet-bar` —— 那個樣式是給「可按的按鈕群」用的，
-        套在純顯示的元素上會多出邊框與 hover 效果。 */
-  const ZoomLvl = L.Control.extend({
-    options:{ position:'bottomright' },
-    onAdd(m){
-      const d = L.DomUtil.create('div', 'jlc-zlvl');
-      d.title = '目前縮放層數';
-      const upd = () => { d.textContent = 'z' + m.getZoom(); };
-      upd();
-      m.on('zoomend', upd);
-      return d;
-    }
-  });
-  map.addControl(new ZoomLvl());
+  /* ET-EDIT（2026-10-15）：原本在地圖上加了一個 `z18` 縮放層數徽章，
+     使用者定案改為【只在 debug 面板顯示】—— 地圖上不再有這個元素，減少視覺干擾。
+     縮放層數仍在 buildDebugLog() 的「縮放 地圖/圖磚/URL/上限」那行輸出。 */
   applyBasemap();
 
   // markercluster：733 個 marker 的效能關鍵
