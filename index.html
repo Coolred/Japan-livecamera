@@ -1143,10 +1143,14 @@ function buildDebugLog(){
   //    灰底通常是③超出了圖資來源的範圍。
   if(tile){
     const o = tile.options;
-    L.push(`縮放 地圖/圖磚/URL    ${J.map ? J.map.getZoom() : '?'} / ${tile._tileZoom} / `
-      + (typeof tile._getZoomForUrl === 'function' ? tile._getZoomForUrl() : '?'));
+    L.push(`縮放 地圖/圖磚/URL/上限  ${J.map ? J.map.getZoom() : '?'} / ${tile._tileZoom} / `
+      + (typeof tile._getZoomForUrl === 'function' ? tile._getZoomForUrl() : '?')
+      + ` / ${J.map ? J.map.getMaxZoom() : '?'}`);
     L.push(`圖層選項              tileSize=${o.tileSize} zoomOffset=${o.zoomOffset} detectRetina=${o.detectRetina} `
       + `maxZoom=${o.maxZoom} maxNativeZoom=${o.maxNativeZoom}`);
+    // ⚠️ 這兩個一定要相等。圖層 maxZoom 小於地圖 maxZoom 時，使用者可以縮到
+    //    圖層產生不出圖磚的層級 → 整片灰底（Leaflet 的 detectRetina 會偷改圖層的值）。
+    L.push(`上限一致？            ${o.maxZoom === (J.map && J.map.getMaxZoom()) ? '✅ 一致' : '❌ 不一致 → 會灰底'}`);
   }
   // ⚠️ 有 src 不等於畫得出來：圖磚失敗時 img.complete 仍可能是 true。
   //    要分開數「請求到了」與「真的畫出來」，並看範例路徑的層數。
@@ -1585,7 +1589,11 @@ function applyBasemap(cfg, dark){
        → Leaflet 判定該層無效 → **一張圖磚都不產生** → 使用者看到灰底。
      （實機 log：地圖/圖磚/URL = 18/18/19，但圖層 maxZoom=17 → 灰底。）
      所以照原值傳的話，retina 手機的實際上限定會少一層。 */
-  const wantMax  = (cfg && cfg.max_zoom) || 18;
+  const wantMax  = (cfg && cfg.max_zoom) || ((uKey || !noKeyMode) ? 19 : 18);
+  //   ↑ 沒有 mapconfig（公開站）時的預設值要看走哪條路：
+  //     · 走 Carto（自備金鑰 / mapconfig）→ 實測到 z20 都還有真實圖磚 → 敢給 19
+  //     · 走 OSM（免金鑰）              → 實測 z19 有、z20 回 HTTP 錯誤 → 只給 18
+  //       （因為 retina 的 zoomOffset+1 會讓實際請求的 URL 層再多一層）
   const retinaOn = ((cfg && cfg.retina) !== false) && !!(window.L && L.Browser && L.Browser.retina);
   const layerMax = retinaOn ? wantMax + 1 : wantMax;   // 抵銷 Leaflet 內部會減掉的那 1
 
