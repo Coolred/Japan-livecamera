@@ -1866,6 +1866,14 @@ function popupHtml(c){
     h += '<div class="warn">此機位無可嵌入的直播串流，僅提供來源連結。</div>' +
          '<div class="act"><button class="ghost" data-act="alt">開啟來源頁面</button></div>';
   }
+  /* ET-EDIT（2026-10-15）：逃生口 —— 輪替型頻道的影片 id 遲早會舊掉，
+     給一顆直達「該頻道當前直播」的連結，資料再舊也點得到。 */
+  if(c.channel_id){
+    h += '<div class="act"><a class="ghost" style="display:block;text-align:center;'
+       + 'text-decoration:none;padding:7px 10px;border-radius:8px" '
+       + 'href="https://www.youtube.com/channel/' + esc(c.channel_id) + '/live" '
+       + 'target="_blank" rel="noopener">↗ 頻道最新直播</a></div>';
+  }
   return h + '</div>';
 }
 
@@ -1910,7 +1918,15 @@ function openModal(c){
       '<div class="src">串流由原頻道提供，本站僅作嵌入，不擁有內容。' +
         (c.stream.url ? ' 來源：<a href="' + esc(c.stream.url) + '" target="_blank" rel="noopener">' + esc(c.stream.url) + '</a>' : '') +
         (c.provider_url ? ' · <a href="' + esc(c.provider_url) + '" target="_blank" rel="noopener">頻道頁</a>' : '') +
-      '</div>';
+      '</div>' +
+      /* ET-EDIT（2026-10-15）：逃生口。
+         有些頻道是「輪替型」——每天重開一支新直播，資料裡的影片 id 遲早會舊掉
+         （實測：歌舞伎町那台在 8 天內就換了 3 次）。這個連結指向「該頻道目前正在直播的那支」，
+         不管資料多舊，點下去永遠到得了當前直播。 */
+      (c.channel_id
+        ? '<div class="src">找不到畫面／已結束？→ <a href="https://www.youtube.com/channel/'
+          + esc(c.channel_id) + '/live" target="_blank" rel="noopener">前往該頻道的最新直播 ↗</a></div>'
+        : '');
   } else if (c.playable && c.stream && c.stream.kind === 'mjpeg_stream' && c.stream.url){
     // 真正的 MJPEG 串流（multipart/x-mixed-replace）：瀏覽器 <img> 會持續更新，
     // **不需**輪詢重載——重載反而會不斷重啟串流。
