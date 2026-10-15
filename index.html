@@ -260,6 +260,8 @@ for(const lv of ['error', 'warn']){
     display:flex;gap:10px;align-items:flex-start;transition:background .12s
   }
   .item:hover,.item.active{background:rgba(214,69,90,.06)}
+  /* // ET-EDIT: 鍵盤選取清單時，焦點須清楚可見。 */
+  .item:focus-visible{outline:2px solid var(--accent);outline-offset:-3px}
   .item .live-dot{width:8px;height:8px;border-radius:50%;flex:0 0 8px;margin-top:5px;background:var(--unknown);box-shadow:0 0 0 3px rgba(148,163,184,.18)}
   .item .live-dot.live{background:var(--live);box-shadow:0 0 0 3px rgba(18,183,106,.18)}
   .item .live-dot.offline{background:var(--offline);box-shadow:0 0 0 3px rgba(240,68,56,.16)}
@@ -503,6 +505,13 @@ for(const lv of ['error', 'warn']){
     }
     .box{width:100%;max-height:92vh;max-height:92dvh}
   }
+  /* // ET-EDIT: 啟動錯誤位於面板外，手機收合清單時仍能看見並重試。 */
+  #bootError{position:fixed;z-index:3300;top:14px;left:14px;right:14px;margin:0 auto;
+    max-width:600px;max-height:calc(100dvh - 28px);overflow:auto;padding:16px;
+    border:1px solid var(--offline);border-radius:12px;background:var(--bg);box-shadow:var(--shadow)}
+  #bootError[hidden]{display:none}
+  #bootError p{margin:0 0 12px;overflow-wrap:anywhere}
+  #bootRetry{padding:9px 16px;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
 </style>
 </head>
 <body>
@@ -511,6 +520,11 @@ for(const lv of ['error', 'warn']){
 <!-- ET-EDIT（2026-10-15）：Toast 容器放在 body 最上層（詳見下方 .panel 內的註解：
      它原本在 .panel 裡，被面板的 overflow:hidden ＋ backdrop-filter 裁掉又跟著隱藏）。 -->
 <div class="toasts" id="toasts" aria-live="polite" aria-atomic="false"></div>
+<!-- // ET-EDIT: 不依賴地圖初始化的錯誤與重試入口。 -->
+<div id="bootError" role="alert" hidden>
+  <p id="bootErrorText"></p>
+  <button id="bootRetry" type="button">重新載入並重試</button>
+</div>
 
 <!-- ET-EDIT: 手機版搜尋鈕（只在抽屜收合時出現，桌面版隱藏） -->
 <button class="searchfab" id="searchFab" type="button" aria-label="開啟搜尋" hidden>
@@ -701,6 +715,38 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+// ET-EDIT: HTML 跳脫不能阻擋 javascript: 等協定；資料連結僅允許 HTTP(S)。
+function safeUrl(value){
+  try{
+    const url = new URL(String(value || ''), location.href);
+    return /^https?:$/.test(url.protocol) ? url.href : '#';
+  }catch(_){ return '#'; }
+}
+
+// ET-EDIT: 兩種 modal 共用焦點進入／歸還，手機清單收合後也能回到原項目。
+const dialogOpeners = new WeakMap();
+function showDialog(modal, initialFocus, opener = document.activeElement){
+  if(!modal.classList.contains('show')) dialogOpeners.set(modal, opener);
+  modal.classList.add('show');
+  modal.setAttribute('aria-hidden', 'false');
+  initialFocus.focus();
+}
+function restoreDialogFocus(modal){
+  const opener = dialogOpeners.get(modal);
+  dialogOpeners.delete(modal);
+  const remaining = [$('#modal'), $('#amodal')].find(m => m.classList.contains('show'));
+  if(remaining && (!opener || !remaining.contains(opener))){
+    remaining.querySelector('button').focus();
+    return;
+  }
+  if(opener && opener.isConnected){
+    if($('#panel').contains(opener)) $('#panel').classList.remove('collapsed');
+    opener.focus({preventScroll:true});
+    if(document.activeElement === opener) return;
+  }
+  $('#btnReset').focus();
+}
+
 /* ET-EDIT（2026-10-15）：顯示用標題。
    有些頻道是「輪替型」——每天重開一支新直播，並把當天日期寫進標題
    （例：「【Archive】2026-10-06『12:00～』…歌舞伎町…」）。連結會跟著換，
@@ -722,6 +768,9 @@ const LIVE_TIP   = {
 const LIVE_RANK  = { live:0, unknown:1, offline:2 };
 
 /* ── 啟動 ─────────────────────────────────────────────── */
+// ET-EDIT: 搜尋入口與重試在 fetch／buildMap 之前就可操作，不受啟動失敗影響。
+setupFabs();
+$('#bootRetry').addEventListener('click', reloadFresh);
 Promise.all([
   // ET-EDIT: 資料一律走 no-cache（＝每次都先問伺服器，沒變就 304 不重傳）。
   //   ⚠️ 不用 no-store：那會變成每次重新下載 2.8MB。
@@ -745,9 +794,12 @@ Promise.all([
   }
 })
   .catch(err => {
-    console.error('無法載入資料', err);
-    $('#stats').innerHTML = '<span class="chip offline">資料載入失敗</span>';
-    $('#list').innerHTML = '<div class="empty">無法載入 <b>data/cameras.json</b>。<br>請以靜態伺服器開啟本頁（例如 <code>python3 -m http.server</code>）。</div>';
+    // ET-EDIT: 同時涵蓋資料與地圖初始化失敗；錯誤用純文字顯示，重試不依賴地圖。
+    console.error('啟動失敗', err);
+    $('#stats').innerHTML = '<span class="chip offline">啟動失敗</span>';
+    $('#list').innerHTML = '<div class="empty">地圖啟動失敗。請檢查網路，並使用上方的「重新載入並重試」。</div>';
+    $('#bootErrorText').textContent = '地圖啟動失敗，請檢查網路後重試。' + (err && err.message ? '（' + err.message + '）' : '');
+    $('#bootError').hidden = false;
   });
 
 function boot(feed, health){
@@ -755,7 +807,7 @@ function boot(feed, health){
   stripBust();                      // ET-EDIT: 把 reloadFresh() 的時間戳從網址列拿掉
   buildMap();
   setupUpdateWatch();               // ET-EDIT: 資料／前端更新→重新整理；後端更新→需重啟
-  setupFabs();                      // ET-EDIT: 搜尋鈕（左上）＋回到全日本（右上）的可見性
+  // ET-EDIT: setupFabs 已在 fetch 前執行，避免重複綁定事件。
   setupDebug();                     // ET-EDIT: 隱藏 debug 面板（?debug=1 或連點新鮮度 5 下）
   setupZoomWatch();                 // ET-EDIT: 被放大時提示怎麼縮回去（iOS 不會自動縮回）
   buildStats(feed);
@@ -1527,7 +1579,8 @@ function openAlerts(){
     h += '<div class="a-head">'
        + '<span class="a-kind">'+label(i.kind)+'</span>'
        + '<span class="a-host">'+esc(i.host)+'</span>'
-       + (i.cameras ? ' <span class="chip" style="padding:2px 7px">'+i.cameras+' 筆</span>' : '')
+       // ET-EDIT: JSON 的數量欄位也必須跳脫，不能假定外部資料一定是數字。
+       + (i.cameras ? ' <span class="chip" style="padding:2px 7px">'+esc(i.cameras)+' 筆</span>' : '')
        + (known ? '<span class="a-st" style="color:'+st.c+';background:'+st.bg+'">'+st.t+'</span>' : '')
        + '</div>';
     h += '<div class="a-note">'+esc(i.note)+'</div>';
@@ -1557,7 +1610,8 @@ function openAlerts(){
              // 避免「HTTP 404（HTTP 404）」這類重複（note 有時就等於結果本身）
              const nt = (p.note || '').trim();
              const extra = (nt && nt.toLowerCase() !== r.toLowerCase()) ? '（'+nt+'）' : '';
-             return '<li><a href="'+esc(p.url)+'" target="_blank" rel="noopener">'
+             // ET-EDIT: 探測網址同時限制協定與跳脫 HTML 屬性。
+             return '<li><a href="'+esc(safeUrl(p.url))+'" target="_blank" rel="noopener">'
                + esc(p.url) + '</a><br><span class="k">'+esc(t)+' → '+esc(r)+esc(extra)
                + '</span></li>';
            }).join('')
@@ -1590,9 +1644,8 @@ function openAlerts(){
   const t = a.generated_at
     ? new Date(a.generated_at * 1000).toLocaleString('zh-TW', {hour12:false}) : '-';
   $('#afoot').textContent = '偵測時間：' + t + '｜「需要你決定」才需動作，其餘管線會自動處理';
-  const m = $('#amodal');
-  m.classList.add('show');
-  m.setAttribute('aria-hidden', 'false');
+  // ET-EDIT: 通知 modal 開啟後焦點移入關閉鈕。
+  showDialog($('#amodal'), $('#aClose'));
 }
 
 function closeAlerts(){
@@ -1600,30 +1653,43 @@ function closeAlerts(){
   if(!m.classList.contains('show')) return;
   m.classList.remove('show');
   m.setAttribute('aria-hidden', 'true');
+  restoreDialogFocus(m); // ET-EDIT: 回到開啟通知前的元素。
 }
 function buildCats(cats){
   const wrap = $('#cats');
-  const counts = {};
+  const counts = Object.create(null); // ET-EDIT: 分類名稱不能碰到物件原型屬性。
   for(const c of (JLC.data.cameras || [])) counts[c.category] = (counts[c.category] || 0) + 1;
   const all = ['全部', ...cats];
   wrap.innerHTML = all.map(c => {
     const n = c === '全部' ? (JLC.data.cameras || []).length : (counts[c] || 0);
-    return '<button data-cat="'+esc(c)+'"'+(c === '全部' ? ' class="on"' : '')+'>'+esc(c)+'<span class="n">'+n+'</span></button>';
+    // ET-EDIT: 分類計數亦通過相同的 HTML 跳脫邊界。
+    return '<button data-cat="'+esc(c)+'"'+(c === '全部' ? ' class="on"' : '')+'>'+esc(c)+'<span class="n">'+esc(n)+'</span></button>';
   }).join('');
 }
 
 /* ── 控制項 ───────────────────────────────────────────── */
 let searchTimer = null;
+// ET-EDIT: 自訂清除鈕、原生 search 清除與刪成空字串都立即取消舊查詢。
+function clearSearch(){
+  clearTimeout(searchTimer);
+  searchTimer = null;
+  $('#q').value = '';
+  $('#searchWrap').classList.remove('has-value');
+  JLC.query = '';
+  render();
+}
 function bindControls(){
   $('#q').addEventListener('input', e => {
     const v = e.target.value;
+    if(!v){ clearSearch(); return; } // ET-EDIT: 清空不再等下一輪 debounce。
     $('#searchWrap').classList.toggle('has-value', !!v);
     clearTimeout(searchTimer);
-    searchTimer = setTimeout(() => { JLC.query = v.trim().toLowerCase(); render(); }, 140);
+    // ET-EDIT: 已執行的計時器清回 null，便於確認沒有殘留查詢。
+    searchTimer = setTimeout(() => { searchTimer = null; JLC.query = v.trim().toLowerCase(); render(); }, 140);
   });
   $('#qClear').addEventListener('click', () => {
-    $('#q').value = ''; $('#searchWrap').classList.remove('has-value');
-    JLC.query = ''; render();
+    clearSearch(); // ET-EDIT: 取消計時器並立即還原搜尋狀態。
+    $('#q').focus();
   });
 
   $('#scope').addEventListener('click', e => {
@@ -1663,10 +1729,21 @@ function bindControls(){
   $('#mGoto').addEventListener('click', gotoOnMap);
   $('#modal').addEventListener('click', e => { if(e.target.id === 'modal') closeModal(); });
   document.addEventListener('keydown', e => {
-    if(e.key !== 'Escape') return;
-    // 通知彈窗優先關閉（它是疊在最上層的）
-    if($('#amodal').classList.contains('show')) closeAlerts();
-    else closeModal();
+    // ET-EDIT: 依實際 z-index 處理最上層 modal；Tab／Shift+Tab 留在對話框內。
+    const modal = [$('#modal'), $('#amodal')].find(m => m.classList.contains('show'));
+    if(!modal) return;
+    if(e.key === 'Escape'){
+      e.preventDefault();
+      if(modal.id === 'modal') closeModal(); else closeAlerts();
+    } else if(e.key === 'Tab'){
+      const focusable = [...modal.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), iframe, summary, [tabindex]:not([tabindex="-1"])')]
+        .filter(el => el.tabIndex >= 0 && el.getClientRects().length);
+      const first = focusable[0], last = focusable[focusable.length - 1];
+      if(first && (!modal.contains(document.activeElement) || (e.shiftKey ? document.activeElement === first : document.activeElement === last))){
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+      }
+    }
   });
   // 通知彈窗的關閉：叉叉按鈕 或 點擊背景
   $('#aClose').addEventListener('click', closeAlerts);
@@ -1816,7 +1893,17 @@ function renderList(cams){
       '</div>';
     el.title = LIVE_TIP[c.live] || '';
     el.__cam = c;                      // 供 gotoOnMap 在清單中反查高亮
+    // ET-EDIT: 清單項目可 Tab 選取，Enter／空白開啟，行為與點擊相同。
+    el.tabIndex = 0;
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-haspopup', 'dialog');
     el.addEventListener('click', () => focusCamera(c, el));
+    el.addEventListener('keydown', e => {
+      if(e.key === 'Enter' || e.key === ' '){
+        e.preventDefault();
+        if(!e.repeat) focusCamera(c, el);
+      }
+    });
     frag.appendChild(el);
   });
   if(cams.length > CAP){
@@ -1830,6 +1917,7 @@ function renderList(cams){
 }
 
 function focusCamera(c, el){
+  const opener = el || document.activeElement; // ET-EDIT: 手機收合面板前先記住焦點。
   [...document.querySelectorAll('.item.active')].forEach(x => x.classList.remove('active'));
   if(el) el.classList.add('active');
   if(c.lat != null && c.lng != null){
@@ -1839,7 +1927,7 @@ function focusCamera(c, el){
     JLC.map.flyTo([c.lat, c.lng], Math.min(15, Math.max(JLC.map.getZoom(), 11)), {duration:.55});
   }
   // 使用者主動點擊 → 才開啟播放 Modal（站內 iframe 僅在此時載入）
-  openModal(c);
+  openModal(c, opener); // ET-EDIT: 關閉時可還原到同一個清單項目。
 }
 
 /* ── Popup ────────────────────────────────────────────── */
@@ -1880,7 +1968,7 @@ function popupHtml(c){
 /* popup 按鈕已於 popupopen 時直接綁定（見 renderMarkers） */
 
 /* ── Modal：播放 / 付費牆替代來源 ─────────────────────── */
-function openModal(c){
+function openModal(c, opener = document.activeElement){ // ET-EDIT: 保存開啟前的元素。
   const playable = !!(c.playable && c.stream && c.stream.youtube_id);
   $('#mtitle').textContent = dispTitle(c);
   $('#msub').innerHTML =
@@ -1916,8 +2004,9 @@ function openModal(c){
     foot.innerHTML =
       '<div>狀態：<b>' + esc(LIVE_LABEL[c.live] || '未檢測') + '</b> — ' + esc(LIVE_TIP[c.live] || '') + '</div>' +
       '<div class="src">串流由原頻道提供，本站僅作嵌入，不擁有內容。' +
-        (c.stream.url ? ' 來源：<a href="' + esc(c.stream.url) + '" target="_blank" rel="noopener">' + esc(c.stream.url) + '</a>' : '') +
-        (c.provider_url ? ' · <a href="' + esc(c.provider_url) + '" target="_blank" rel="noopener">頻道頁</a>' : '') +
+        // ET-EDIT: 播放器來源與提供者網址僅允許 HTTP(S)。
+        (c.stream.url ? ' 來源：<a href="' + esc(safeUrl(c.stream.url)) + '" target="_blank" rel="noopener">' + esc(c.stream.url) + '</a>' : '') +
+        (c.provider_url ? ' · <a href="' + esc(safeUrl(c.provider_url)) + '" target="_blank" rel="noopener">頻道頁</a>' : '') +
       '</div>' +
       /* ET-EDIT（2026-10-15）：逃生口。
          有些頻道是「輪替型」——每天重開一支新直播，資料裡的影片 id 遲早會舊掉
@@ -1947,7 +2036,8 @@ function openModal(c){
     foot.innerHTML =
       '<div>狀態：<b>即時影像</b> — 來源提供的 MJPEG 串流。</div>' +
       '<div class="src">本站僅作轉載連結，不擁有內容。' +
-        (c.stream.url ? ' 來源：<a href="' + esc(c.stream.url) + '" target="_blank" rel="noopener">' + esc(c.provider || '來源') + '</a>' : '') +
+        // ET-EDIT: MJPEG 串流的來源連結限制協定並跳脫。
+        (c.stream.url ? ' 來源：<a href="' + esc(safeUrl(c.stream.url)) + '" target="_blank" rel="noopener">' + esc(c.provider || '來源') + '</a>' : '') +
       '</div>';
   } else if (c.playable && c.stream && c.stream.kind === 'mjpeg_snapshot' && c.stream.url){
     // 定期更新的 JPEG 快照（如東京港埠頭）：以 <img> 呈現並自動輪詢重載。
@@ -1969,7 +2059,8 @@ function openModal(c){
     foot.innerHTML =
       '<div>狀態：<b>即時影像</b> — 由來源定期更新的畫面（每 ' + esc(String(c.stream.snapshot_refresh || 10)) + ' 秒）。</div>' +
       '<div class="src">本站僅作轉載連結，不擁有內容。' +
-        (c.stream.url ? ' 來源：<a href="' + esc(c.stream.url) + '" target="_blank" rel="noopener">' + esc(c.provider || '來源') + '</a>' : '') +
+        // ET-EDIT: 快照的來源連結限制協定並跳脫。
+        (c.stream.url ? ' 來源：<a href="' + esc(safeUrl(c.stream.url)) + '" target="_blank" rel="noopener">' + esc(c.provider || '來源') + '</a>' : '') +
       '</div>';
   } else {
     stage.innerHTML = '<div class="ph">' +
@@ -1984,7 +2075,8 @@ function openModal(c){
     if(c.block_note) ft += '<div class="note">⚠ ' + esc(c.block_note) + '</div>';
     // 來源整併時，優先把替代站台列出來
     if(c.block_reason === 'source_moved' && c.stream && c.stream.alt_source){
-      ft += '<div><b>替代站台</b>：<a href="' + esc(c.stream.alt_source) +
+      // ET-EDIT: 替代站台亦不可使用可執行協定。
+      ft += '<div><b>替代站台</b>：<a href="' + esc(safeUrl(c.stream.alt_source)) +
             '" target="_blank" rel="noopener">' + esc(c.stream.alt_source) + '</a></div>';
     }
     const alts = c.alternatives || [];
@@ -1997,12 +2089,14 @@ function openModal(c){
         const note  = a.note ? '<div class="k" style="margin-top:3px">' + esc(a.note) + '</div>' : '';
         const refer = a.referer_required ? '<div class="k">需以 ' + esc(a.referer_required) + ' 為參照頁</div>' : '';
         ft += '<li>' + (a.url
-            ? '<a href="' + esc(a.url) + '" target="_blank" rel="noopener">' + name + '</a>'
+            // ET-EDIT: 替代來源同時處理屬性跳脫與協定限制。
+            ? '<a href="' + esc(safeUrl(a.url)) + '" target="_blank" rel="noopener">' + name + '</a>'
             : name) + kind + extra + note + refer + '</li>';
       }
       ft += '</ul></div>';
     } else if(c.stream && c.stream.url){
-      ft += '<div><b>原始來源</b>：<a href="' + esc(c.stream.url) + '" target="_blank" rel="noopener">' +
+      // ET-EDIT: 無法內嵌時的原始來源連結也使用同一邊界。
+      ft += '<div><b>原始來源</b>：<a href="' + esc(safeUrl(c.stream.url)) + '" target="_blank" rel="noopener">' +
             esc(c.stream.url) + '</a></div>';
     }
     if(c.provider)        ft += '<div class="src">提供者：' + esc(c.provider) + '</div>';
@@ -2011,10 +2105,8 @@ function openModal(c){
     foot.innerHTML = ft;
   }
 
-  const modal = $('#modal');
-  modal.classList.add('show');
-  modal.setAttribute('aria-hidden', 'false');
-  $('#mClose').focus();
+  // ET-EDIT: 開啟與歸還焦點由兩種 modal 共用的流程管理。
+  showDialog($('#modal'), $('#mClose'), opener);
 }
 
 function closeModal(){
@@ -2027,6 +2119,7 @@ function closeModal(){
   $('#mfoot').innerHTML = '';
   // 停止快照輪詢：否則關閉後仍持續打來源（浪費對方頻寬）
   if(JLC.snapshotTimer){ clearInterval(JLC.snapshotTimer); JLC.snapshotTimer = null; }
+  restoreDialogFocus(modal); // ET-EDIT: 完成播放器清理後，歸還焦點。
 }
 
 /* 「前往地圖位置」：從播放頁跳回地圖並定位該機位。
