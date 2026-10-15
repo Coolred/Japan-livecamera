@@ -698,7 +698,7 @@ if(window.innerWidth <= 820){
 }
 
 const JLC = {
-  data:null, mapconfig:null, map:null, cluster:null, tile:null,
+  data:null, map:null, cluster:null, tile:null,
   scope:'tourism', liveOnly:true, category:'全部', query:'',
   markers:new Map(),           // idx -> marker
   markerByCam:new Map(),       // camKey -> marker（供 gotoOnMap 精確定位）
@@ -2008,8 +2008,8 @@ function gotoOnMap(){
   closeModal();
 
   // ⚠️ 縮放**完全比照 focusCamera**：min(15, max(目前, 11))。
-  //    地圖 maxZoom 是 19（mapconfig.max_zoom），若用 cluster.zoomToShowLayer()
-  //    會一路拉到 19，使用者看到「放過大」（實測：歌舞伎町 5→19）。
+  //    地圖 maxZoom 是 19（retina 手機為 18），若用 cluster.zoomToShowLayer()
+  //    會一路拉到上限，使用者看到「放過大」（實測：歌舞伎町 5→19）。
   const zoom = Math.min(15, Math.max(JLC.map.getZoom(), 11));
 
   // 機位可能不在目前篩選內（例如從「觀光優先」開了非觀光機位）
