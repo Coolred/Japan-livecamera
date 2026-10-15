@@ -558,6 +558,18 @@ for(const lv of ['error', 'warn']){
     }
     .box{width:100%;max-height:92vh;max-height:92dvh}
   }
+
+  /* ── 桌機版：縮放層數改放縮放鈕【左側】────────────────
+     ⚠️ 不要留在 Leaflet 預設的堆疊位置（縮放鈕上方）：
+        那裡會撞到右下角的「回到預設位置」浮動鈕
+        （FAB 在 bottom 96~140、Leaflet 堆疊的指示在 98~120 → 完全重疊）。
+        放左側後右下的垂直堆疊只剩「FAB + 縮放鈕」兩個，兩者已互不衝突。
+        right:50px = 14(邊距) + 34(縮放鈕寬) + 2(間隙)；bottom:24px 與縮放鈕下緣對齊。 */
+  @media (min-width:821px){
+    .leaflet-bottom.leaflet-right .jlc-zlvl{
+      position:fixed;right:50px;bottom:24px;left:auto;top:auto;margin:0
+    }
+  }
 </style>
 </head>
 <body>
@@ -1116,13 +1128,32 @@ function buildDebugLog(){
   L.push('');
   L.push('══ 地圖 ══');
   const J = window.JLC || {};
-  const tileSrc = [...document.querySelectorAll('img.leaflet-tile')].map(i => i.getAttribute('src')).filter(Boolean);
+  const tile = J.tile;
+  const tiles = [...document.querySelectorAll('img.leaflet-tile')];
+  const drawn = tiles.filter(i => i.complete && i.naturalWidth > 0);
+  const failed = tiles.filter(i => i.complete && i.naturalWidth === 0);
   const hosts = {};
-  for(const u of tileSrc){ try { const h = new URL(u).host; hosts[h] = (hosts[h]||0)+1; } catch(e){} }
-  L.push(`JLC.map / JLC.tile   ${!!J.map} / ${!!J.tile}`);
+  for(const i of tiles){ try { const h = new URL(i.src).host; hosts[h] = (hosts[h]||0)+1; } catch(e){} }
+  L.push(`JLC.map / JLC.tile   ${!!J.map} / ${!!tile}`);
   L.push(`leaflet-container    ${!!$('.leaflet-container')}`);
-  L.push(`圖磚 img              ${document.querySelectorAll('img.leaflet-tile').length}（有 src ${tileSrc.length}）`);
+  // ⚠️ 縮放有三個層次，混在一起看會誤判：
+  //    ① 地圖層   = 使用者看到的
+  //    ② 圖磚層   = Leaflet 依 tileSize/maxNativeZoom 算出要抓哪一格的圖
+  //    ③ URL 層   = 實際寫進網址的 z（= 圖磚層 + zoomOffset）
+  //    灰底通常是③超出了圖資來源的範圍。
+  if(tile){
+    const o = tile.options;
+    L.push(`縮放 地圖/圖磚/URL    ${J.map ? J.map.getZoom() : '?'} / ${tile._tileZoom} / `
+      + (typeof tile._getZoomForUrl === 'function' ? tile._getZoomForUrl() : '?'));
+    L.push(`圖層選項              tileSize=${o.tileSize} zoomOffset=${o.zoomOffset} detectRetina=${o.detectRetina} `
+      + `maxZoom=${o.maxZoom} maxNativeZoom=${o.maxNativeZoom}`);
+  }
+  // ⚠️ 有 src 不等於畫得出來：圖磚失敗時 img.complete 仍可能是 true。
+  //    要分開數「請求到了」與「真的畫出來」，並看範例路徑的層數。
+  L.push(`圖磚 img              ${tiles.length}（畫出 ${drawn.length} / 失敗 ${failed.length}）`);
   L.push(`圖磚主機              ${Object.keys(hosts).length ? JSON.stringify(hosts) : '(還沒載到)'}`);
+  const sample = tiles[0] ? String(tiles[0].src).replace(/^https?:\/\/[^/]+/, '').replace(/[?&]key=[^&]*/gi, '') : '';
+  if(sample) L.push(`圖磚範例路徑          ${sample}`);
   L.push(`noKeyMode            ${J.noKeyMode}`);
   L.push(`mapconfig            ${J.mapconfig ? `有（key_present=${J.mapconfig.key_present}）` : '無（公開站正常）'}`);
   L.push(`自備金鑰              ${(() => { try { return localStorage.getItem('jlc.carto.key') ? '有' : '無'; } catch(e){ return '讀不到'; } })()}`);
