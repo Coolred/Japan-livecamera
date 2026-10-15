@@ -1575,10 +1575,24 @@ function applyBasemap(cfg, dark){
     ? withKey(cartoPick, uKey)
     : (noKeyMode ? base : picked);
 
+  /* ET-EDIT ⚠️ maxZoom 要先「預加 1」—— 這是「z18 灰底」的真因。
+     Leaflet 的 detectRetina 在 retina 裝置上會**自己**做三件事（原始碼實測符合）：
+       options.tileSize  = Math.floor(tileSize / 2);      // 256 → 128
+       options.zoomOffset++;                              //   0 → 1
+       options.maxZoom   = Math.max(0, maxZoom - 1);      //  18 → 17
+     但它只改「圖層」的 maxZoom，**地圖本身的 maxZoom 不變**（仍是 18）。
+     → 使用者可以縮到 z18，而圖層的 tileZoom 已超過自己的 maxZoom
+       → Leaflet 判定該層無效 → **一張圖磚都不產生** → 使用者看到灰底。
+     （實機 log：地圖/圖磚/URL = 18/18/19，但圖層 maxZoom=17 → 灰底。）
+     所以照原值傳的話，retina 手機的實際上限定會少一層。 */
+  const wantMax  = (cfg && cfg.max_zoom) || 18;
+  const retinaOn = ((cfg && cfg.retina) !== false) && !!(window.L && L.Browser && L.Browser.retina);
+  const layerMax = retinaOn ? wantMax + 1 : wantMax;   // 抵銷 Leaflet 內部會減掉的那 1
+
   JLC.tile = L.tileLayer(url, {
     // OSM 不用 {s} 子網域（已不建議）；Carto 用 abcd。
     subdomains: (uKey || !noKeyMode) ? ((cfg && cfg.subdomains) || 'abcd') : '',
-    maxZoom:(cfg && cfg.max_zoom) || 18,
+    maxZoom: layerMax,
     // maxNativeZoom：圖磚實際可用的最高層級。超過時 Leaflet 會**放大既有圖磚**
     // 而非向伺服器要更高層級（那會拿到灰底佔位圖）。
     // 實測：Carto 在 z20 的鄉村地區已是灰底（石垣島 z20=2599B、奥尻島全層級 103B）。
@@ -1589,7 +1603,14 @@ function applyBasemap(cfg, dark){
       : ((cfg && cfg.attribution) || '&copy; OpenStreetMap contributors &copy; CARTO'),
     crossOrigin:true
   }).addTo(map);
-  JLC.noKeyMode = noKeyMode && !uKey;     // 供深色切換提示用
+  JLC.noKeyMode = noKeyMode && !uKey;
+
+  /* ET-EDIT: 地圖的縮放上限一律跟圖層對齊 —— 讀圖層**算完之後**的值，不寫死數字。
+     為什麼一定要做：切換底圖（深色／換金鑰）會重建圖層，而圖層的 maxZoom
+     會隨裝置是否 retina 而不同（見上）。只要地圖能縮到圖層產生不出圖磚的層級，
+     使用者就會看到灰底。這裡把兩者綁死，任何情況下都不會出現「可縮但沒圖」。
+     ⚠️ 用 setMaxZoom(層的值) 而不是 setMaxZoom(常數)：Leaflet 內部還會再調整一次。 */
+  map.setMaxZoom(JLC.tile.options.maxZoom);
 
   // ET-EDIT: 自備金鑰若無效（會被 Carto 擋），使用者只會看到灰底卻不知原因 → 主動提示。
   //   只在「有自備金鑰」時掛，且同一 session 只提示一次，不洗版。
