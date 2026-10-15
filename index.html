@@ -413,6 +413,15 @@ for(const lv of ['error', 'warn']){
   #dbgText{margin:0;padding:12px;overflow:auto;font-size:11px;line-height:1.6;
     white-space:pre-wrap;word-break:break-all;-webkit-overflow-scrolling:touch;flex:1}
 
+  /* ET-EDIT: Leaflet 縮放控制（預設在右下）
+     ⚠️ 純顯示的縮放層數指示 —— 不要套 .leaflet-bar（那是給可按按鈕群的樣式） */
+  .jlc-zlvl{
+    background:rgba(255,255,255,.92);border:1px solid var(--line);border-radius:8px;
+    padding:3px 7px;font:600 11.5px/1.25 ui-monospace,Menlo,Consolas,monospace;
+    color:var(--ink-2);box-shadow:0 2px 8px rgba(10,25,45,.14);
+    cursor:default;-webkit-user-select:none;user-select:none;text-align:center
+  }
+
   .mobile-handle{display:none}
 
   /* ── 彈出視窗（Popup）──────────────────────────────── */
@@ -540,6 +549,12 @@ for(const lv of ['error', 'warn']){
        ⚠️ 62px = 搜尋鈕上緣 14px + 高度 38px + 10px 留白。 */
     .leaflet-bottom.leaflet-right .leaflet-control-zoom{
       position:fixed;left:14px;top:62px;right:auto;bottom:auto;margin:0
+    }
+    /* ET-EDIT: 縮放層數指示跟著縮放鈕搬到左上，排在它下面。
+       134px = 62(縮放鈕上緣) + 64(縮放鈕高) + 8(間隙)。
+       兩個是成對的，搬家要一起搬，不然會一個在左上一個在右下。 */
+    .leaflet-bottom.leaflet-right .jlc-zlvl{
+      position:fixed;left:14px;top:134px;right:auto;bottom:auto;margin:0
     }
     .box{width:100%;max-height:92vh;max-height:92dvh}
   }
@@ -1095,6 +1110,8 @@ function buildDebugLog(){
   const zoom = $('.leaflet-control-zoom');
   L.push(`縮放鈕 .leaflet-control-zoom`);
   L.push(`  ${r(zoom)}  position=${cs(zoom,'position')} left=${cs(zoom,'left')} top=${cs(zoom,'top')} z=${cs(zoom,'z-index')}`);
+  const zl = $('.jlc-zlvl');
+  L.push(`縮放層數 ${zl ? zl.textContent : '(不存在)'}  ${r(zl)}  position=${cs(zl,'position')}`);
 
   L.push('');
   L.push('══ 地圖 ══');
@@ -1426,6 +1443,25 @@ function buildMap(cfg){
   }).setView([37.6, 137.8], 5);
   JLC.map = map;
   L.control.zoom({position:'bottomright'}).addTo(map);
+
+  /* ET-EDIT ── 顯示目前縮放層數（z4 ~ z18）
+     為什麼用 Leaflet 原生 control 而不是自己做浮動 div：
+       ① 位置交給 Leaflet 排 —— 會自動跟縮放鈕在同一個角落堆疊，不用自己算座標
+       ② 手機版再由 CSS 把它跟縮放鈕一起搬到左上（見媒體查詢），維持成對
+     ⚠️ 不要套 `leaflet-bar` —— 那個樣式是給「可按的按鈕群」用的，
+        套在純顯示的元素上會多出邊框與 hover 效果。 */
+  const ZoomLvl = L.Control.extend({
+    options:{ position:'bottomright' },
+    onAdd(m){
+      const d = L.DomUtil.create('div', 'jlc-zlvl');
+      d.title = '目前縮放層數';
+      const upd = () => { d.textContent = 'z' + m.getZoom(); };
+      upd();
+      m.on('zoomend', upd);
+      return d;
+    }
+  });
+  map.addControl(new ZoomLvl());
   applyBasemap(cfg, false);
 
   // markercluster：733 個 marker 的效能關鍵
