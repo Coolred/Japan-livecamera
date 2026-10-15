@@ -566,6 +566,15 @@ for(const lv of ['error', 'warn']){
       <button data-liveonly="0">含未播</button>
     </div>
 
+    <!-- ET-EDIT（2026-10-15）：使用者指示「我希望管線找不到的，標示出來，到時候用 AI 去精修」。
+         地圖上這些機位已經是【空心圈】，這一組只是讓使用者能把他們一次列成清單。
+         ⚠️ 為什麼不叫「錯誤」：這些位置不是錯，是**精度不足或不確定** ——
+            標成「錯誤」會誤導，標成「待確認」才是實話。 -->
+    <div class="seg" id="lowconf" role="group" aria-label="位置可信度" style="margin-top:6px">
+      <button data-low="0" class="on">位置不拘</button>
+      <button data-low="1">⚠️ 位置待確認 <span class="n" id="nLow"></span></button>
+    </div>
+
     <div class="cats" id="cats" role="group" aria-label="分類篩選"></div>
   </div>
 
@@ -672,7 +681,7 @@ if(window.innerWidth <= 820){
 
 const JLC = {
   data:null, map:null, cluster:null, tile:null,
-  scope:'tourism', liveOnly:true, category:'全部', query:'',
+  scope:'tourism', liveOnly:true, lowOnly:false, category:'全部', query:'',
   markers:new Map(),           // idx -> marker
   markerByCam:new Map(),       // camKey -> marker（供 gotoOnMap 精確定位）
   filtered:[],                 // 目前可視機位
@@ -1439,6 +1448,17 @@ function buildStats(feed){
   $('#nTourism').textContent = '(' + t.tourism + ')';
   $('#nAll').textContent = '(' + cams.length + ')';
   $('#nLive').textContent = '(' + t.live + ')';
+  /* ET-EDIT（2026-10-15）：位置待確認的計數。
+     ⚠️ 分開數「地圖上看得到的」與「連座標都沒有」的 ——
+        後者（missing）在地圖上不會出現，混在一起講會讓人以為地圖上找得到。 */
+  const nLowMap  = cams.filter(c => isLowConf(c) && c.lat != null).length;
+  const nLowNone = cams.filter(c => isLowConf(c) && c.lat == null).length;
+  const nLowEl = $('#nLow');
+  if(nLowEl){
+    nLowEl.textContent = '(' + nLowMap + ')';
+    nLowEl.parentElement.title = '位置待確認：地圖上 ' + nLowMap + ' 筆（空心圈）'
+      + (nLowNone ? '，另有 ' + nLowNone + ' 筆完全沒有座標（不會出現在地圖上）' : '');
+  }
 }
 
 /* ── 系統通知（通知按鈕 + 點擊彈窗）─────────────────────────────
@@ -1608,6 +1628,15 @@ function bindControls(){
     render(true);
   });
 
+  /* ET-EDIT（2026-10-15）：「位置待確認」篩選。
+     切到這一組時，清單就變成「待精修工作佇列」—— 使用者指示要拿這份去用 AI 精修。 */
+  $('#lowconf').addEventListener('click', e => {
+    const b = e.target.closest('button'); if(!b) return;
+    JLC.lowOnly = b.dataset.low === '1';
+    [...e.currentTarget.children].forEach(x => x.classList.toggle('on', x === b));
+    render(true);
+  });
+
   $('#cats').addEventListener('click', e => {
     const b = e.target.closest('button'); if(!b) return;
     JLC.category = b.dataset.cat;
@@ -1661,6 +1690,10 @@ function render(fit){
   // 「只看直播中」：預設開啟，隱藏已停播（offline）機位，避免使用者點到失效連結。
   // 未檢測（unknown）仍保留——它們只是尚未檢查，不代表失效。
   if(JLC.liveOnly) match = match.filter(c => c.live !== 'offline');
+  // ET-EDIT（2026-10-15）：「位置待確認」——只留管線信心不足的機位。
+  //   使用者指示：「我希望管線找不到的，標示出來，到時候用 AI 去精修」。
+  //   這是他要精修的工作佇列，所以連**沒有座標**的也要留（地圖上不畫，但清單要看得到）。
+  if(JLC.lowOnly) match = match.filter(isLowConf);
   match = sortCams(match);
   const scoped = JLC.scope === 'tourism'
     ? match.filter(c => c.tourism)
@@ -1696,9 +1729,12 @@ function renderMarkers(cams, inScope){
     if(c.lat == null || c.lng == null) return;
     const cls = liveClass(c);
     const dim = !inScope.has(c);                       // 觀光焦點模式下非觀光機位淡化
-    const guessed = c.quality && c.quality.coord === 'guessed';  // 由標題推估的位置
+    /* ET-EDIT（2026-10-15）：原本只認 `guessed`，現在擴大到所有低信心等級
+       （見 isLowConf 的說明：縣級座標誤差可達 260km，不能只標 guessed）。 */
+    const guessed = isLowConf(c);                      // 位置待確認（空心圈＋半透明）
+    const why = guessed ? lowWhy(c) : '';
     const size = dim ? (guessed ? 9 : 11) : (guessed ? 12 : 15);
-    // 推估座標：空心圈樣式 + 半透明，與實測座標（實心）明確區隔，避免誤導為精確位置
+    // 待確認座標：空心圈樣式 + 半透明，與實測座標（實心）明確區隔，避免誤導為精確位置
     const fill = guessed ? 'transparent' : dotColor(cls);
     const stroke = guessed ? dotColor(cls) : '#fff';
     const m = L.marker([c.lat, c.lng], {
@@ -1708,10 +1744,10 @@ function renderMarkers(cams, inScope){
             +'background:'+fill+';border:'+(guessed?2.5:2)+'px solid '+stroke+';'
             +'box-shadow:0 1px 5px rgba(10,25,45,.45)'
             +(dim ? ';opacity:.42' : (guessed ? ';opacity:.8' : ''))+'"'
-            +(guessed ? ' title="位置由標題推估"' : '')+'></span>',
+            +(guessed ? ' title="'+why+'"' : '')+'></span>',
         iconSize:L.point(size, size), iconAnchor:L.point(size/2, size/2), popupAnchor:L.point(0, -9)
       }),
-      title: (c.title || '') + (guessed ? '（位置由標題推估）' : ''), riseOnHover:true,
+      title: (c.title || '') + (guessed ? '（' + why + '）' : ''), riseOnHover:true,
       zIndexOffset: dim ? 0 : (guessed ? 200 : 400)
     });
     m.bindPopup(popupHtml(c), {minWidth:200, maxWidth:280, autoPanPadding:[70, 70]});
@@ -1805,8 +1841,8 @@ function popupHtml(c){
       (c.live === 'live' && c.verified_live ? '<span class="tag live">已驗證直播中</span>' : '') + '<br>' +
       esc(c.poi || c.address || '') +
       (c.provider ? '<br>' + esc(c.provider) : '') +
-      (c.quality && c.quality.coord === 'guessed'
-        ? '<br><span class="approx">≈ 位置由標題推估'
+      (isLowConf(c)
+        ? '<br><span class="approx">≈ ' + esc(lowWhy(c))
           + (c.coord_matched ? '（' + esc(c.coord_matched) + '）' : '') + '</span>'
         : '') + '</div>';
   if(!c.playable){
@@ -1837,7 +1873,7 @@ function openModal(c){
   const gotoBtn = $('#mGoto');
   gotoBtn.disabled = !hasCoord;
   gotoBtn.title = hasCoord
-    ? '在地圖上顯示此機位位置' + (c.quality && c.quality.coord === 'guessed' ? '（位置由標題推估）' : '')
+    ? '在地圖上顯示此機位位置' + (isLowConf(c) ? '（' + lowWhy(c) + '）' : '')
     : '此機位尚無座標';
   JLC.modalCam = c;                    // 供 gotoOnMap 取用
 
@@ -2034,6 +2070,37 @@ function visibleParent(marker){
 
 /* ── 小工具 ───────────────────────────────────────────── */
 function liveClass(c){ return !c.playable ? 'blocked' : (c.live === 'live' || c.live === 'offline' ? c.live : 'unknown'); }
+/* ET-EDIT（2026-10-15）── 管線「找不到位置」的各種長相
+   使用者指示：「我希望管線找不到的，標示出來，到時候用 AI 去精修」。
+
+   ⚠️ 為什麼不能只認 `quality.coord === 'guessed'`（原本只認這個，142 筆）：
+      縣級座標（prefecture）的誤差可達 **260km** —— 實測「稚内カントリークラブ」
+      被畫在札幌。它對使用者的誤導性跟 guessed 一樣大，不該因為欄位名字不同就不標。
+
+   ⚠️ `missing`（329 筆）沒有座標 → 地圖上根本不會出現（renderMarkers 開頭就跳過），
+      所以「空心圈」只涵蓋有座標的那些；但清單與計數要含它們，那才是完整的待辦。
+
+   ⚠️ **兩個欄位都要看**（實測：寫這支時差點漏掉）：
+      · `quality.coord`   → guessed / missing / upstream
+      · `coord_precision` → prefecture / locality（這些的 quality.coord 是 'geocode'，
+        看起來很正常，只有 precision 欄位才看得出來精度不足） */
+const LOWQ = { guessed:1, missing:1, upstream:1 };      // quality.coord
+const LOWP = { prefecture:1, locality:1 };              // coord_precision
+function isLowConf(c){
+  const q = (c.quality && c.quality.coord) || '';
+  const p = c.coord_precision || '';
+  return !!(LOWQ[q] || LOWP[p] || c.lat == null || c.lng == null);
+}
+function lowWhy(c){
+  const q = (c.quality && c.quality.coord) || '';
+  const p = c.coord_precision || '';
+  if(c.lat == null || c.lng == null || q === 'missing') return '管線查不到座標';
+  if(p === 'prefecture') return '位置只到縣級，可能誤差數十公里';
+  if(p === 'locality')   return '位置只到市町村';
+  if(q === 'guessed')    return '位置由標題推估';
+  if(q === 'upstream' || p === 'upstream') return '上游提供的位置，未經查證';
+  return '位置待確認';
+}
 function dotColor(cls){
   return cls === 'live' ? '#12b76a' : cls === 'offline' ? '#f04438' : cls === 'blocked' ? '#f79009' : '#94a3b8';
 }
