@@ -701,6 +701,18 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s == null ? '' : s)
   .replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
 
+/* ET-EDIT（2026-10-15）：顯示用標題。
+   有些頻道是「輪替型」——每天重開一支新直播，並把當天日期寫進標題
+   （例：「【Archive】2026-10-06『12:00～』…歌舞伎町…」）。連結會跟著換，
+   標題若不同步就會出現「顯示 10-06、播出 10-15」的錯亂。
+
+   ⚠️ 不動 c.title —— 那是穩定識別，被 key_hash／去重／人工座標比對使用。
+      管線把最新抓到的標題另存成 c.live_title（見 build_feed.py / recover_offline.py），
+      前端只在「顯示」時優先用它。 */
+function dispTitle(c){
+  return (c && (c.live_title || c.recovered_title)) || (c && c.title) || '(未命名)';
+}
+
 const LIVE_LABEL = { live:'直播中', offline:'目前未播', unknown:'未檢測' };
 const LIVE_TIP   = {
   live:'偵測到正在直播（依前次檢測）',
@@ -1795,7 +1807,7 @@ function renderList(cams){
     el.innerHTML =
       '<span class="live-dot ' + cls + '"></span>' +
       '<div class="body">' +
-        '<div class="t">' + esc(c.title || '(未命名)') + badge + '</div>' +
+        '<div class="t">' + esc(dispTitle(c)) + badge + '</div>' +
         '<div class="m">' +
           '<span class="tag">' + esc(c.category || '-') + '</span>' +
           (c.poi ? '<span>' + esc(c.poi) + '</span>' : '') +
@@ -1835,7 +1847,7 @@ function popupHtml(c){
   const ok = c.playable && c.stream && c.stream.youtube_id;
   const cls = liveClass(c);
   let h = '<div class="pop">' +
-    '<div class="t">' + esc(c.title || '(未命名)') + '</div>' +
+    '<div class="t">' + esc(dispTitle(c)) + '</div>' +
     '<div class="meta"><span class="tag">' + esc(c.category || '-') + '</span>' +
       '<span class="tag">' + esc(LIVE_LABEL[c.live] || '未檢測') + '</span>' +
       (c.live === 'live' && c.verified_live ? '<span class="tag live">已驗證直播中</span>' : '') + '<br>' +
@@ -1862,7 +1874,7 @@ function popupHtml(c){
 /* ── Modal：播放 / 付費牆替代來源 ─────────────────────── */
 function openModal(c){
   const playable = !!(c.playable && c.stream && c.stream.youtube_id);
-  $('#mtitle').textContent = c.title || '(未命名)';
+  $('#mtitle').textContent = dispTitle(c);
   $('#msub').innerHTML =
     '<span class="chip" style="padding:3px 8px">' + esc(c.category || '-') + '</span>' +
     '<span class="chip" style="padding:3px 8px">' + esc(LIVE_LABEL[c.live] || '未檢測') + '</span>' +
@@ -1890,7 +1902,7 @@ function openModal(c){
     iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
     iframe.allowFullscreen = true;
     iframe.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
-    iframe.title = c.title || '即時影像';
+    iframe.title = dispTitle(c);
     ratio.appendChild(iframe);
     stage.appendChild(ratio);
     foot.innerHTML =
