@@ -480,17 +480,23 @@ for(const lv of ['error', 'warn']){
          因為抽屜的固定區塊（把手＋head＋controls＋foot）就吃掉 ~386px，
          58% 只剩 76px 給列表。
          解法是【兩邊下手】：①固定區塊瘦身（見下方 .head/.controls 規則）
-         ②上限提到 76% —— 開場已經會自動收合（不像當初 74vh 那時一開站就蓋住地圖），
-         展開時使用者本來就是要看清單，所以放大是對的。 */
-      max-height:58vh; max-height:calc(var(--vh, 100vh) * .76); transition:max-height .25s ease
+         ②上限提到 86% —— 面板**開場完全隱藏**（見下方 .panel.collapsed），
+         展開是使用者主動點搜尋鈕造成的，本來就是要看清單，所以放大是對的。 */
+      max-height:calc(var(--vh, 100vh) * .86); transition:max-height .25s ease
     }
-    /* 收合：以 max-height 裁切（不用 transform — backdrop-filter 會使 transform 失效）*/
-    .panel.collapsed{max-height:56px}
-    .panel.collapsed .head,
-    .panel.collapsed .controls,
-    .panel.collapsed .listwrap,
-    .panel.collapsed .foot{display:none}
-    .panel.collapsed .psheetclose{display:none}
+    /* ET-EDIT（2026-10-15）：收合 = **完全不佔位**（原本只縮成 56px 的把手條）。
+       兩個理由，都是使用者實測回報：
+         ① 「看不到地圖的宣告」—— 那條 56px 正好壓在右下角的授權標示上，
+            而 **OSM 圖磚政策明文禁止把 attribution 藏在 UI 底下**（硬性要求，
+            見 https://operations.osmfoundation.org/policies/tiles/ 第 2 節）。
+            這不只是美觀問題，是合規問題。
+         ② 「佔空間」。
+       改成完全隱藏後，右下角歸地圖所有；要開面板就點左上的搜尋鈕（#searchFab）。 */
+    .panel.collapsed{display:none}
+    /* ⚠️ 面板「展開」時也不能蓋住授權標示（同一條政策）。
+       把 Leaflet 右下角整組往上抬 --panelh（面板實測高度，由 setupFabs 維護）。
+       縮放鈕不受影響：手機版它已經被改成 position:fixed 固定在左上。 */
+    .leaflet-bottom.leaflet-right{bottom:var(--panelh, 0px)}
     .mobile-handle{display:block;padding:10px 0 6px;cursor:pointer;text-align:center}
     .mobile-handle i{display:inline-block;width:40px;height:4px;border-radius:3px;background:rgba(15,30,50,.22)}
     .head{padding:2px 14px 9px}
@@ -567,7 +573,7 @@ for(const lv of ['error', 'warn']){
 </button>
 
 <aside class="panel" id="panel">
-  <div class="mobile-handle" id="handle" title="展開／收合清單"><i></i></div>
+  <div class="mobile-handle" id="handle" title="收合清單（隱藏面板）"><i></i></div>
   <!-- ET-EDIT: 手機版收合鈕（桌機隱藏）。使用者回報「找不到關閉的方式」。 -->
   <button class="psheetclose" id="panelClose" type="button" title="收合清單" aria-label="收合清單">✕</button>
   <div class="head">
@@ -681,13 +687,15 @@ for(const lv of ['error', 'warn']){
  * 資料來源：data/cameras.json（feed）。底圖用 OpenStreetMap 官方圖磚（免金鑰、無後端）。
  * 合約：feed 欄位名不得變更。 */
 
-/* ET-EDIT ── 手機版開場先收合面板
-   為什麼：手機版面板是底部抽屜，展開時佔 74vh —— 一開站就蓋掉大半地圖，
-   根本看不到地圖也不好瀏覽。
+/* ET-EDIT ── 手機版開場「完全隱藏」面板（2026-10-15 使用者定案）
+   為什麼：手機版面板是底部抽屜，一開站就蓋掉大半地圖，根本看不到地圖也不好瀏覽；
+   而且收合成 56px 把手條時**正好壓在右下角的授權標示上** ——
+   OSM 圖磚政策明文禁止把 attribution 藏在 UI 底下（硬性要求，不只是美觀）。
+   現在改為完全隱藏（.panel.collapsed{display:none}），右下角歸地圖所有。
    ⚠️ 放在這裡（解析時就跑）而不是 boot()：boot() 要等資料 fetch 完，
       那中間會先看到抽屜彈出來閃一下。
-   ⚠️ 收合後右上只剩 56px 把手 → 靠左上的「搜尋」懸浮鈕把入口補回來
-      （見 setupFabs）。 */
+   ⚠️ 面板沒有了，**入口只剩左上的「搜尋」懸浮鈕** → 由 setupFabs 同步放行
+      （也是在那裡處理「點搜尋→開面板＋focus 輸入框」）。 */
 if(window.innerWidth <= 820){
   const _p = document.getElementById('panel');
   if(_p) _p.classList.add('collapsed');
@@ -1191,12 +1199,13 @@ function setupFabs(){
   if(searchFab){
     searchFab.addEventListener('click', () => {
       panel.classList.remove('collapsed');
-      // ET-EDIT ⚠️ 手機**不要**自動 focus：iOS 一 focus 就彈出鍵盤，
-      //   可視區瞬間被吃掉一半以上，地圖和浮動鈕全被擠掉 ——
-      //   實機回報「Auto focus 會把 UI 推不見」。按鈕只負責「打開面板」，
-      //   要打字再自己點輸入框（桌面沒有鍵盤問題，維持自動 focus）。
+      /* ET-EDIT（2026-10-15）：改成**手機也自動 focus**。
+         為什麼翻案：先前不 focus 是因為「開場自動 focus」——使用者沒打算打字，
+         鍵盤卻彈出來把 UI 推不見（實機回報）。
+         現在面板**預設完全隱藏**，會打開一定是使用者主動點了搜尋鈕 → 意圖就是要打字，
+         focus 才是對的。鍵盤彈出時 --vh 會跟著 visualViewport 縮小，面板自動讓開。 */
       const q = $('#q');
-      if(q && window.innerWidth > 820) q.focus();
+      if(q) q.focus();
       sync();
     });
   }
