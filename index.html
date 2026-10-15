@@ -65,7 +65,7 @@ for(const lv of ['error', 'warn']){
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  /* ET-EDIT: 手機用 dvh（動態可視高度）—— 見下方 .fab/.panel 的說明。
+  /* ET-EDIT: 手機用 dvh（動態可視高度）—— 見下方 .tools/.panel 的說明。
      沒有 dvh 的瀏覽器沿用 height:100%（＝大視窗高度），至少有 fallback。 */
   @supports (height:100dvh){ html,body{height:100dvh} }
   body{
@@ -294,22 +294,6 @@ for(const lv of ['error', 'warn']){
      瀏覽器預設的 `[hidden]{display:none}`，導致隱藏鈕仍可見但沒綁事件（按了沒反應）。
      發佈版沒有 alerts.json → 鈴鐺就是這樣變成「看得見卻點不動」。 */
   .tools button[hidden]{display:none}
-  /* ET-EDIT: 右下懸浮鈕（回到全日本視角）
-     ⚠️ [hidden] 一定要自己補 —— .fab 用了 display:grid，
-        會蓋掉瀏覽器預設的 [hidden]{display:none}（本專案已踩三次）。
-     ⚠️ bottom 不能用 18px：Leaflet 的縮放鈕也在右下（zoomControl position:'bottomright'），
-        兩者會疊在一起（使用者 PC 截圖回報圓形鈕壓在 +/− 上）。
-        96px = 18(下緣留白) + 64(縮放鈕實測高) + 10(Leaflet 的 margin) + 4(間隙)
-        —— 兩者都貼底，所以這個補償量不隨視窗高度改變。 */
-  .fab{position:fixed;right:18px;bottom:96px;z-index:520;
-    width:44px;height:44px;border:0;border-radius:50%;cursor:pointer;
-    background:#fff;color:var(--ink-2);display:grid;place-items:center;
-    box-shadow:0 6px 20px rgba(10,25,45,.24);
-    transition:background .15s,color .15s,transform .12s}
-  .fab:hover{color:var(--ink)}
-  .fab:active{transform:scale(.94)}
-  .fab svg{width:20px;height:20px}
-  .fab[hidden]{display:none}
   /* ET-EDIT: Toast —— 通用浮動通知（右下堆疊、由右滑入、不擋操作）
      第一個使用者：版本更新提示。其他通知可直接沿用 .toast 這個結構。 */
   .toasts{position:fixed;right:18px;bottom:18px;z-index:3200;display:flex;
@@ -504,12 +488,9 @@ for(const lv of ['error', 'warn']){
     .listwrap{min-height:118px}
     .foot{padding-bottom:7px}
     .tools{top:14px;right:14px}
-    /* ET-EDIT: 「回到全日本」在手機改到【右上、工具列下方】——
-       ① 原本放右下，會壓到 Leaflet 的縮放鈕（zoomControl 也是 bottomright）
-       ② 而且面板一展開就被蓋住／被藏起來（使用者回報「右邊按鈕消失」）
-       放右上則永遠可見、永遠不會被底部面板影響。
-       160px = 工具列最壞情況高度（3 顆 40px + 2 個 8px 間隙 + 上緣 14px）+ 10px 留白。 */
-    .fab{right:14px;top:160px;bottom:auto}
+    /* ET-EDIT（2026-10-15）：「回到全日本」已併進 .tools（見 HTML 的註解），
+       不再需要獨立的定位規則。舊版本放在 top:160 是浮在工具列下方約 100px 的
+       空白處、跟任何東西都沒有視覺關聯 —— 使用者回報「在一個奇怪地方」。 */
     /* ET-EDIT: Leaflet 的縮放鈕在手機改到【左上、搜尋鈕下方】。
        為什麼不用「量面板高度再把縮放鈕推上去」：那要 ResizeObserver + 過渡動畫同步，
        實測難驗、容易在別的瀏覽器壞掉。移到左上則完全不需要量任何東西，
@@ -539,15 +520,6 @@ for(const lv of ['error', 'warn']){
   </svg><span>搜尋</span>
 </button>
 
-<!-- ET-EDIT: 回到全日本視角（右下懸浮鈕）—— 放 body 層而非 .panel 內，
-     否則 position:absolute 會以面板為基準，飄到面板的右下角而不是畫面右下角 -->
-<button id="btnReset" type="button" class="fab" title="回到全日本視角" aria-label="重設視角">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
-       stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-    <circle cx="12" cy="12" r="9"></circle>
-    <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"></path>
-  </svg>
-</button>
 
 <aside class="panel" id="panel">
   <div class="mobile-handle" id="handle" title="收合清單（隱藏面板）"><i></i></div>
@@ -615,6 +587,18 @@ for(const lv of ['error', 'warn']){
       <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 01-3.4 0"></path>
     </svg>
     <span class="badge" id="alertBadge"></span>
+  </button>
+  <!-- ET-EDIT（2026-10-15）：回到全日本視角**併進工具列**。
+       原本它是獨立的 .fab，手機版被放在 top:160 —— 浮在工具列下方約 100px 的空白處，
+       跟任何東西都沒有視覺關聯（使用者回報「在一個奇怪地方」）。
+       它本質上就是一個地圖操作，跟其他工具按鈕同一組才對。
+       順帶拿掉桌面版的 bottom:96px 這個魔法補償值 —— 工具列統一在右上，不再需要。 -->
+  <button id="btnReset" type="button" title="回到全日本視角" aria-label="重設視角">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="12" cy="12" r="9"></circle>
+      <path d="M3 12h18M12 3c2.5 2.6 2.5 15.4 0 18M12 3c-2.5 2.6-2.5 15.4 0 18"></path>
+    </svg>
   </button>
   </div><!-- /.tools -->
 
