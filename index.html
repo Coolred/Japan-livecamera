@@ -2206,7 +2206,7 @@ function liveClass(c){ return !c.playable ? 'blocked' : (c.live === 'live' || c.
       · `coord_precision` → prefecture / locality（這些的 quality.coord 是 'geocode'，
         看起來很正常，只有 precision 欄位才看得出來精度不足） */
 const LOWQ = { guessed:1, missing:1, upstream:1 };      // quality.coord
-const LOWP = { prefecture:1, locality:1 };              // coord_precision
+const LOWP = { prefecture:1, locality:1, region:1 };              // coord_precision
 function isLowConf(c){
   const q = (c.quality && c.quality.coord) || '';
   const p = c.coord_precision || '';
@@ -2218,6 +2218,7 @@ function lowWhy(c){
   if(c.lat == null || c.lng == null || q === 'missing') return '管線查不到座標';
   if(p === 'prefecture') return '位置只到縣級，可能誤差數十公里';
   if(p === 'locality')   return '位置只到市町村';
+  if(p === 'region')     return '非地點／聚合型，只放區域代表點';
   if(q === 'guessed')    return '位置由標題推估';
   if(q === 'upstream' || p === 'upstream') return '上游提供的位置，未經查證';
   return '位置待確認';
