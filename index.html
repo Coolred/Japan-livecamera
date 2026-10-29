@@ -1938,9 +1938,11 @@ function popupHtml(c){
     '<div class="t">' + esc(dispTitle(c)) + '</div>' +
     '<div class="meta"><span class="tag">' + esc(c.category || '-') + '</span>' +
       '<span class="tag">' + esc(LIVE_LABEL[c.live] || '未檢測') + '</span>' +
-      (c.live === 'live' && c.verified_live ? '<span class="tag live">已驗證直播中</span>' : '') + '<br>' +
+      (c.live === 'live' && c.verified_live ? '<span class="tag live">已驗證直播中</span>' : '') +
+      (c.stale ? '<span class="tag">疑似停播</span>' : '') + '<br>' +
       esc(c.poi || c.address || '') +
       (c.provider ? '<br>' + esc(c.provider) : '') +
+      (c.stale ? '<br><span class="approx">' + esc(c.stale_note || '疑似停播') + '</span>' : '') +
       (isLowConf(c)
         ? '<br><span class="approx">≈ ' + esc(lowWhy(c))
           + (c.coord_matched ? '（' + esc(c.coord_matched) + '）' : '') + '</span>'
@@ -1974,6 +1976,7 @@ function openModal(c, opener = document.activeElement){ // ET-EDIT: 保存開啟
   $('#msub').innerHTML =
     '<span class="chip" style="padding:3px 8px">' + esc(c.category || '-') + '</span>' +
     '<span class="chip" style="padding:3px 8px">' + esc(LIVE_LABEL[c.live] || '未檢測') + '</span>' +
+    (c.stale ? '<span class="chip" style="padding:3px 8px">疑似停播</span>' : '') +
     (c.provider ? '<span class="chip" style="padding:3px 8px">' + esc(c.provider) + '</span>' : '');
 
   // 「前往地圖位置」按鈕狀態：無座標者停用（避免點了沒反應）
