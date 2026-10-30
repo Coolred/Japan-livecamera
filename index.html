@@ -1461,12 +1461,66 @@ function buildMap(){
      · **不可**預設送 `no-cache` 標頭、**不可**設 Referrer-Policy 擋掉 Referer
      · 可用性是 best-effort（無 SLA）；**哪天變成公開熱門站就必須換掉**
      · 官方「建議」：不要把圖磚網址寫死（所以放常數）、加一個「回報地圖問題」連結 */
-const OSM_TILE = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const OSM_MAX = 19;          // 實測 z19 有、z20 回 400
+const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
+const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">地理院タイル</a>（国土地理院）';
 
-function applyBasemap(){
+/* ET-EDIT（2026-10-30）：底圖改成「有備援的清單」。
+   原因：`tile.openstreetmap.org` 實測會整站連不上（12 秒 timeout，HTTP 000），
+   圖磚一張都拿不到 → 標記還在、底圖全灰，看起來就像「地圖不見了」。
+   現在依序嘗試，前三張都失敗且沒有任何一張成功載入時自動換下一個，
+   並記在 localStorage，下次直接從可用的那個開始。 */
+const BASE_LAYERS = [
+  { id:'osm',   label:'OpenStreetMap',
+    url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    max:19, subdomains:'',
+    attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
+  { id:'gsi',   label:'地理院地圖（国土地理院）',
+    url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+    max:18, subdomains:'',
+    attribution: GSI_ATTR },
+  { id:'osmde', label:'OpenStreetMap（德國鏡像）',
+    url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+    max:19, subdomains:'abc',
+    attribution: OSM_ATTR },
+];
+const OSM_MAX = 19;          // 實測 z19 有、z20 回 400（OSM 系）
+
+/* 用一張圖磚探測來源是否可用（no-cors：只要能連上就算成功，不讀內容）。 */
+function probeTile(url, cb){
+  const probe = url.replace('{z}', 4).replace('{x}', 13).replace('{y}', 6).replace('{s}', 'a');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  fetch(probe, { mode:'no-cors', cache:'no-store', signal: ctrl.signal })
+    .then(() => { clearTimeout(timer); cb(true); })
+    .catch(() => { clearTimeout(timer); cb(false); });
+}
+
+function applyBasemap(idx){
   const map = JLC.map;
+  if(idx == null){
+    const saved = Number(localStorage.getItem('jlc_basemap'));
+    idx = Number.isInteger(saved) && saved >= 0 && saved < BASE_LAYERS.length ? saved : 0;
+  }
+  const cfg = BASE_LAYERS[idx] || BASE_LAYERS[0];
   if(JLC.tile){ map.removeLayer(JLC.tile); JLC.tile = null; }
+
+  /* ET-EDIT（2026-10-30）：先做一次 4 秒探測。
+     為什麼不等 tileerror：連不上的站台是「連線一直不回應」，每張圖磚要等 10～12 秒才
+     timeout，使用者會盯 10 秒以上的一片空白才看到切換。先用一張圖磚探測，
+     失敗就立刻換下一個來源。 */
+  if(!JLC.probed || JLC.probed !== cfg.id){
+    JLC.probed = cfg.id;
+    probeTile(cfg.url, ok => {
+      if(ok) return;
+      const next = idx + 1;
+      if(next >= BASE_LAYERS.length) return;   // 由下面的 tileerror 統一報錯
+      try{ localStorage.setItem('jlc_basemap', String(next)); }catch(e){}
+      applyBasemap(next);
+      toast({ icon:'🗺️', key:'basemap-switch',
+        title:'底圖已自動切換',
+        body: cfg.label + ' 連不上，改用 ' + BASE_LAYERS[next].label + '。' });
+    });
+  }
 
   /* ⚠️ maxZoom 要先「預加 1」—— 這是「z18 灰底」的真因。
      Leaflet 的 detectRetina 在 retina 裝置上會**自己**做三件事（原始碼實測符合）：
@@ -1481,24 +1535,48 @@ function applyBasemap(){
      在 retina 上一樣會比較銳利（OSM 沒有 {r}/@2x，那個效果靠這招達到）。
      代價是地圖上限少一層、圖磚數多 4 倍。 */
   const retinaOn = !!(window.L && L.Browser && L.Browser.retina);
-  const wantMax  = retinaOn ? OSM_MAX - 1 : OSM_MAX;   // 兩種裝置最後都會停在「URL 層 = z19」
-  const layerMax = retinaOn ? wantMax + 1 : wantMax;   // 抵銷 Leaflet 內部會減掉的那 1
+  const wantMax  = retinaOn ? cfg.max - 1 : cfg.max;
+  const layerMax = retinaOn ? wantMax + 1 : wantMax;
 
-  JLC.tile = L.tileLayer(OSM_TILE, {
-    subdomains:'',                 // OSM 不用 {s} 子網域（官方已不建議）
+  const layer = L.tileLayer(cfg.url, {
+    subdomains: cfg.subdomains,
     maxZoom: layerMax,
-    maxNativeZoom: OSM_MAX,
+    maxNativeZoom: cfg.max,
     detectRetina: true,
-    /* ⚠️ 授權標示不可省略、不可被 UI 遮住（OSM 政策硬性要求）。
-       後面的「回報地圖問題」是政策「建議」項目（fixthemap）—— 加在標示列最自然。 */
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors'
-      + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>',
+    /* ⚠️ 授權標示不可省略、不可被 UI 遮住（OSM 政策硬性要求；
+       地理院タイル同樣要求標示出典）。 */
+    attribution: cfg.attribution,
     crossOrigin: true
-  }).addTo(map);
+  });
 
+  let errs = 0, oks = 0, switched = false;
+  layer.on('tileload', () => { oks++; });
+  layer.on('tileerror', () => {
+    if(switched || oks > 0) return;          // 只要有一張成功，就只是零星失敗
+    if(++errs < 6) return;
+    switched = true;
+    const next = idx + 1;
+    if(next >= BASE_LAYERS.length){          // 全部失敗：至少把原因講清楚
+      toast({ icon:'🗺️', key:'basemap-fail',
+        title:'底圖載入失敗',
+        body:'所有圖磚來源都連不上，地圖只會顯示標記。請確認網路後重新整理。',
+        actions:[{ label:'重新載入', onClick(){ location.reload(); } }] });
+      return;
+    }
+    try{ localStorage.setItem('jlc_basemap', String(next)); }catch(e){}
+    applyBasemap(next);
+    toast({ icon:'🗺️', key:'basemap-switch',
+      title:'底圖已自動切換',
+      body: cfg.label + ' 連不上，改用 ' + BASE_LAYERS[next].label + '。' });
+  });
+
+  layer.addTo(map);
+  JLC.tile = layer;
+  JLC.baseIdx = idx;
   /* 地圖的縮放上限一律跟圖層對齊 —— 讀圖層**算完之後**的值，不寫死數字。
      只要地圖能縮到圖層產生不出圖磚的層級，使用者就會看到灰底。 */
-  map.setMaxZoom(JLC.tile.options.maxZoom);
+  map.setMaxZoom(layer.options.maxZoom);
+  return layer;
 }
 
 /* ── 統計 ─────────────────────────────────────────────── */
