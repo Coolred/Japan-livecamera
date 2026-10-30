@@ -1498,6 +1498,14 @@ function probeTile(url, cb){
 function applyBasemap(idx){
   const map = JLC.map;
   if(idx == null){
+    // ET-EDIT（2026-10-30）：?basemap=gsi 可手動指定底圖（除錯／分享用）。
+    const forced = new URLSearchParams(location.search).get('basemap');
+    if(forced){
+      const k = BASE_LAYERS.findIndex(b => b.id === forced);
+      if(k >= 0) idx = k;
+    }
+  }
+  if(idx == null){
     const saved = Number(localStorage.getItem('jlc_basemap'));
     idx = Number.isInteger(saved) && saved >= 0 && saved < BASE_LAYERS.length ? saved : 0;
   }
