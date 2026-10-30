@@ -1565,8 +1565,11 @@ function applyBasemap(idx){
     detectRetina: true,
     /* ⚠️ 授權標示不可省略、不可被 UI 遮住（OSM 政策硬性要求；
        地理院タイル同樣要求標示出典）。 */
-    attribution: cfg.attribution,
-    crossOrigin: true
+    attribution: cfg.attribution
+    /* ET-EDIT（2026-10-30）：拿掉 crossOrigin。
+       我們沒有把圖磚畫進 canvas，不需要 CORS；但 crossOrigin:true 會讓每個請求多帶
+       `Origin: https://coolred.github.io` 標頭，看起來就像「第三方 App 在抓圖磚」——
+       正是 OSM 圖磚政策要攔的型態。改成一般 <img> 請求，跟其他網站嵌入 OSM 的行為一致。 */
   });
 
   let errs = 0, oks = 0, switched = false;
