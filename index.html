@@ -1464,16 +1464,12 @@ function buildMap(){
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">地理院タイル</a>（国土地理院）';
 
-/* ET-EDIT（2026-10-30）：底圖改成「有備援的清單」。
-   原因：`tile.openstreetmap.org` 實測會整站連不上（12 秒 timeout，HTTP 000），
-   圖磚一張都拿不到 → 標記還在、底圖全灰，看起來就像「地圖不見了」。
-   現在依序嘗試，前三張都失敗且沒有任何一張成功載入時自動換下一個，
-   並記在 localStorage，下次直接從可用的那個開始。 */
+/* ET-EDIT（2026-10-30）：底圖順序調整為「地理院優先」。
+   原因：`tile.openstreetmap.org` 對本專案的請求回傳 **HTTP 200 的「403 Access blocked」圖磚**
+   （標頭 x-blocked: Access denied…），地圖看起來就是一片空白 —— 不是斷線，是被 OSM 擋。
+   地理院タイル是日本國土地理院的官方圖磚，出典標示即可使用，且日本地名/道路更完整。
+   OSM 仍保留為備援（政策允許個人低流量使用，哪天恢復就還能用）。 */
 const BASE_LAYERS = [
-  { id:'osm',   label:'OpenStreetMap',
-    url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-    max:19, subdomains:'',
-    attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
   { id:'gsi',   label:'地理院地圖（国土地理院）',
     url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
     max:18, subdomains:'',
@@ -1482,6 +1478,10 @@ const BASE_LAYERS = [
     url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
     max:19, subdomains:'abc',
     attribution: OSM_ATTR },
+  { id:'osm',   label:'OpenStreetMap',
+    url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+    max:19, subdomains:'',
+    attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
 ];
 const OSM_MAX = 19;          // 實測 z19 有、z20 回 400（OSM 系）
 
@@ -1506,8 +1506,11 @@ function applyBasemap(idx){
     }
   }
   if(idx == null){
-    const saved = Number(localStorage.getItem('jlc_basemap'));
-    idx = Number.isInteger(saved) && saved >= 0 && saved < BASE_LAYERS.length ? saved : 0;
+    // 用「來源 id」記住，不用索引 —— 順序調整後索引會指到別家（曾經踩過）。
+    const savedId = localStorage.getItem('jlc_basemap_id') || '';
+    try{ localStorage.removeItem('jlc_basemap'); }catch(e){}
+    const k = BASE_LAYERS.findIndex(b => b.id === savedId);
+    idx = k >= 0 ? k : 0;
   }
   const cfg = BASE_LAYERS[idx] || BASE_LAYERS[0];
   if(JLC.tile){ map.removeLayer(JLC.tile); JLC.tile = null; }
@@ -1522,7 +1525,7 @@ function applyBasemap(idx){
       if(ok) return;
       const next = idx + 1;
       if(next >= BASE_LAYERS.length) return;   // 由下面的 tileerror 統一報錯
-      try{ localStorage.setItem('jlc_basemap', String(next)); }catch(e){}
+      try{ localStorage.setItem('jlc_basemap_id', BASE_LAYERS[next].id); }catch(e){}
       applyBasemap(next);
       toast({ icon:'🗺️', key:'basemap-switch',
         title:'底圖已自動切換',
@@ -1571,7 +1574,7 @@ function applyBasemap(idx){
         actions:[{ label:'重新載入', onClick(){ location.reload(); } }] });
       return;
     }
-    try{ localStorage.setItem('jlc_basemap', String(next)); }catch(e){}
+    try{ localStorage.setItem('jlc_basemap_id', BASE_LAYERS[next].id); }catch(e){}
     applyBasemap(next);
     toast({ icon:'🗺️', key:'basemap-switch',
       title:'底圖已自動切換',
