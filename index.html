@@ -1479,18 +1479,18 @@ const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" targ
    不同網路，實測 200 / 40KB / 1.2s，而且**畫面完全是同一套標準 OSM 樣式**（使用者指定要這個）。
    地理院地圖保留為第二順位（日本地名更完整，但樣式不同）。 */
 const BASE_LAYERS = [
-  { id:'osmde', label:'OpenStreetMap（標準樣式）',
-    url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-    max:19, subdomains:'abc',
-    attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
-  { id:'gsi',   label:'地理院地圖（国土地理院）',
-    url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
-    max:18, subdomains:'',
-    attribution: GSI_ATTR },
   { id:'osm',   label:'OpenStreetMap（官方）',
     url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     max:19, subdomains:'',
     attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
+  { id:'osmde', label:'OpenStreetMap（標準樣式・鏡像）',
+    url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+    max:19, subdomains:'abc',
+    attribution: OSM_ATTR },
+  { id:'gsi',   label:'地理院地圖（国土地理院）',
+    url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
+    max:18, subdomains:'',
+    attribution: GSI_ATTR },
 ];
 const OSM_MAX = 19;          // 實測 z19 有、z20 回 400（OSM 系）
 
@@ -1504,7 +1504,7 @@ function probeTile(url, cb){
     .catch(() => { clearTimeout(timer); cb(false); });
 }
 
-function applyBasemap(idx){
+function applyBasemap(idx, opts){
   const map = JLC.map;
   if(idx == null){
     // ET-EDIT（2026-10-30）：?basemap=gsi 可手動指定底圖（除錯／分享用）。
@@ -1528,7 +1528,10 @@ function applyBasemap(idx){
      為什麼不等 tileerror：連不上的站台是「連線一直不回應」，每張圖磚要等 10～12 秒才
      timeout，使用者會盯 10 秒以上的一片空白才看到切換。先用一張圖磚探測，
      失敗就立刻換下一個來源。 */
-  if(!JLC.probed || JLC.probed !== cfg.id){
+  /* ET-EDIT（2026-10-30）：探測只在「自動選」時做。
+     使用者自己從選單挑了哪一個，就尊重他 —— 之前手動切到官方 OSM，
+     探測一失敗又被自動切走，看起來就像「官方版壞掉」，其實是我們自己把它換掉的。 */
+  if(!(opts && opts.manual) && (!JLC.probed || JLC.probed !== cfg.id)){
     JLC.probed = cfg.id;
     probeTile(cfg.url, ok => {
       if(ok) return;
@@ -1600,7 +1603,33 @@ function applyBasemap(idx){
      只要地圖能縮到圖層產生不出圖磚的層級，使用者就會看到灰底。 */
   map.setMaxZoom(layer.options.maxZoom);
   syncBasemapPicker(idx);
+  if(cfg.id === 'osm') setTimeout(() => checkOsmBlocked(idx, opts), 1200);
   return layer;
+}
+
+/* ET-EDIT（2026-10-30）：官方 OSM 被擋時「仍然回 200」，只是內容換成封鎖告示圖，
+   所以 tileerror / 探測都不會觸發，地圖只是安靜地變空白。
+   用一張固定的東京圖磚（z7）比對大小：正常 20–45KB，封鎖圖約 7KB。 */
+function checkOsmBlocked(idx, opts){
+  fetch('https://tile.openstreetmap.org/7/113/50.png', { mode:'cors', cache:'no-store' })
+    .then(r => r.blob())
+    .then(b => {
+      if(b.size >= 12000) return;
+      const next = idx + 1;
+      if(next >= BASE_LAYERS.length) return;
+      if(opts && opts.manual){
+        toast({ icon:'🗺️', key:'basemap-blocked',
+          title:'官方 OSM 回傳封鎖圖磚',
+          body:'這個 IP 目前被 OSM 擋住（403 Access blocked）。可從右下角切到「' + BASE_LAYERS[next].label + '」。' });
+        return;
+      }
+      try{ localStorage.setItem('jlc_basemap_id', BASE_LAYERS[next].id); }catch(e){}
+      applyBasemap(next, { manual:true });
+      toast({ icon:'🗺️', key:'basemap-blocked',
+        title:'底圖已自動切換',
+        body:'OpenStreetMap 官方回傳封鎖圖磚，改用 ' + BASE_LAYERS[next].label + '。' });
+    })
+    .catch(() => {});
 }
 
 /* ET-EDIT（2026-10-30）：底圖手動切換器。
@@ -1629,7 +1658,7 @@ function buildBasemapPicker(){
       sel.addEventListener('change', () => {
         const i = Number(sel.value) || 0;
         try{ localStorage.setItem('jlc_basemap_id', BASE_LAYERS[i].id); }catch(e){}
-        applyBasemap(i);
+        applyBasemap(i, { manual:true });
       });
       // 點控制項不要連帶觸發地圖拖曳／縮放
       L.DomEvent.disableClickPropagation(box);
