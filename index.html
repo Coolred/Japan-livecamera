@@ -1472,21 +1472,22 @@ function buildMap(){
 const OSM_ATTR = '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> contributors';
 const GSI_ATTR = '<a href="https://maps.gsi.go.jp/development/ichiran.html" target="_blank" rel="noopener noreferrer">地理院タイル</a>（国土地理院）';
 
-/* ET-EDIT（2026-10-30）：底圖順序調整為「地理院優先」。
-   原因：`tile.openstreetmap.org` 對本專案的請求回傳 **HTTP 200 的「403 Access blocked」圖磚**
-   （標頭 x-blocked: Access denied…），地圖看起來就是一片空白 —— 不是斷線，是被 OSM 擋。
-   地理院タイル是日本國土地理院的官方圖磚，出典標示即可使用，且日本地名/道路更完整。
-   OSM 仍保留為備援（政策允許個人低流量使用，哪天恢復就還能用）。 */
+/* ET-EDIT（2026-10-30）：底圖以「OSM 標準樣式」為預設，但走德國鏡像。
+   原因：`tile.openstreetmap.org` 解析到 Fastly（199.232.113.91），TCP 443 直接 timeout，
+   偶爾能連上時回的是 HTTP 200 的「403 Access blocked」圖磚（標頭 x-blocked）——
+   兩種症狀都是被 OSM 端擋掉，不是我們寫錯。`tile.openstreetmap.de` 由德國 OSM 社群自營、
+   不同網路，實測 200 / 40KB / 1.2s，而且**畫面完全是同一套標準 OSM 樣式**（使用者指定要這個）。
+   地理院地圖保留為第二順位（日本地名更完整，但樣式不同）。 */
 const BASE_LAYERS = [
+  { id:'osmde', label:'OpenStreetMap（標準樣式）',
+    url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
+    max:19, subdomains:'abc',
+    attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
   { id:'gsi',   label:'地理院地圖（国土地理院）',
     url:'https://cyberjapandata.gsi.go.jp/xyz/std/{z}/{x}/{y}.png',
     max:18, subdomains:'',
     attribution: GSI_ATTR },
-  { id:'osmde', label:'OpenStreetMap（德國鏡像）',
-    url:'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-    max:19, subdomains:'abc',
-    attribution: OSM_ATTR },
-  { id:'osm',   label:'OpenStreetMap',
+  { id:'osm',   label:'OpenStreetMap（官方）',
     url:'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     max:19, subdomains:'',
     attribution: OSM_ATTR + ' · <a href="https://www.openstreetmap.org/fixthemap" target="_blank" rel="noopener noreferrer">回報地圖問題</a>' },
