@@ -86,6 +86,10 @@ for(const lv of ['error', 'warn']){
   #map{position:fixed;inset:0;background:#dfe6ee;z-index:0}
   .leaflet-container{font:inherit;background:#dfe6ee}
   .leaflet-control-attribution{font-size:10px;background:rgba(255,255,255,.78)}
+  /* 底圖切換器（地圖左下角）：小、半透明、不搶視線 */
+  .basemap-pick select{font:inherit;font-size:11px;padding:4px 6px;border-radius:7px;
+    border:1px solid rgba(15,40,70,.18);background:rgba(255,255,255,.9);
+    color:#16324f;box-shadow:0 2px 8px rgba(10,25,45,.15);cursor:pointer;max-width:190px}
   .leaflet-bar a{border-radius:8px}
 
   /* ── 玻璃面板 ──────────────────────────────────────── */
@@ -1417,6 +1421,7 @@ function buildMap(){
      使用者定案改為【只在 debug 面板顯示】—— 地圖上不再有這個元素，減少視覺干擾。
      縮放層數仍在 buildDebugLog() 的「縮放 地圖/圖磚/URL/上限」那行輸出。 */
   applyBasemap();
+  buildBasemapPicker();
 
   // markercluster：733 個 marker 的效能關鍵
   const cluster = L.markerClusterGroup({
@@ -1590,7 +1595,47 @@ function applyBasemap(idx){
   /* 地圖的縮放上限一律跟圖層對齊 —— 讀圖層**算完之後**的值，不寫死數字。
      只要地圖能縮到圖層產生不出圖磚的層級，使用者就會看到灰底。 */
   map.setMaxZoom(layer.options.maxZoom);
+  syncBasemapPicker(idx);
   return layer;
+}
+
+/* ET-EDIT（2026-10-30）：底圖手動切換器。
+   使用者先遇到 OSM 擋圖磚，才有這次修正 —— 給他一顆自己的開關，
+   不必改網址、也不必等我改程式。 */
+function syncBasemapPicker(idx){
+  const sel = $('#basemapSel');
+  if(sel && String(sel.value) !== String(idx)) sel.value = String(idx);
+}
+
+function buildBasemapPicker(){
+  const map = JLC.map;
+  if(!map || $('#basemapSel')) return;
+  const Ctl = L.Control.extend({
+    options:{ position:'bottomleft' },
+    onAdd(){
+      const box = L.DomUtil.create('div', 'basemap-pick');
+      const sel = document.createElement('select');
+      sel.id = 'basemapSel';
+      sel.setAttribute('aria-label', '底圖來源');
+      BASE_LAYERS.forEach((b, i) => {
+        const o = document.createElement('option');
+        o.value = String(i); o.textContent = b.label;
+        sel.appendChild(o);
+      });
+      sel.addEventListener('change', () => {
+        const i = Number(sel.value) || 0;
+        try{ localStorage.setItem('jlc_basemap_id', BASE_LAYERS[i].id); }catch(e){}
+        applyBasemap(i);
+      });
+      // 點控制項不要連帶觸發地圖拖曳／縮放
+      L.DomEvent.disableClickPropagation(box);
+      L.DomEvent.disableScrollPropagation(box);
+      box.appendChild(sel);
+      return box;
+    }
+  });
+  map.addControl(new Ctl());
+  syncBasemapPicker(JLC.baseIdx || 0);
 }
 
 /* ── 統計 ─────────────────────────────────────────────── */
