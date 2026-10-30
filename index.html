@@ -1611,7 +1611,7 @@ function buildBasemapPicker(){
   const map = JLC.map;
   if(!map || $('#basemapSel')) return;
   const Ctl = L.Control.extend({
-    options:{ position:'bottomleft' },
+    options:{ position:'bottomright' },
     onAdd(){
       const box = L.DomUtil.create('div', 'basemap-pick');
       const sel = document.createElement('select');
