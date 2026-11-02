@@ -2415,7 +2415,9 @@ function liveClass(c){ return !c.playable ? 'blocked' : (c.live === 'live' || c.
       · `coord_precision` → prefecture / locality（這些的 quality.coord 是 'geocode'，
         看起來很正常，只有 precision 欄位才看得出來精度不足） */
 const LOWQ = { guessed:1, missing:1, upstream:1 };      // quality.coord
-const LOWP = { prefecture:1, locality:1, region:1 };              // coord_precision
+/* ET-EDIT（2026-11-02）：upstream 也列入低信心。
+   來源自帶座標（248 筆）沒有經過查證，不該跟 landmark 一樣被當成精確。 */
+const LOWP = { prefecture:1, locality:1, region:1, upstream:1 };   // coord_precision
 function isLowConf(c){
   const q = (c.quality && c.quality.coord) || '';
   const p = c.coord_precision || '';
