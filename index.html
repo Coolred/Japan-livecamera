@@ -85,6 +85,25 @@ for(const lv of ['error', 'warn']){
      fixed 才是對可視區定位。 */
   #map{position:fixed;inset:0;background:#dfe6ee;z-index:0}
   .leaflet-container{font:inherit;background:#dfe6ee}
+  /* ET-EDIT（2026-11-05）：機位標記隨縮放放大。
+     原本固定 15px，z16 以上在高解析螢幕上又小又糊，街廓上幾乎看不到點。
+     做法：iconSize 固定 26×26（錨點不位移），圓點本身用 CSS 變數依縮放級距放大。 */
+  .mk-wrap{width:34px;height:34px;display:flex;align-items:center;justify-content:center;pointer-events:none}
+  .mk{display:block;width:calc(var(--d,16px) * var(--k,1));height:calc(var(--d,16px) * var(--k,1));border-radius:50%;
+      background:var(--c);border:2px solid #fff;box-sizing:border-box;
+      box-shadow:0 0 0 1px rgba(8,20,35,.28), 0 2px 5px rgba(8,20,35,.45);
+      transition:width .12s ease,height .12s ease,border-width .12s ease}
+  .mk-g{background:transparent;border:2.5px solid var(--c);opacity:.95}
+  /* ET-EDIT（2026-11-05）：淡化（非觀光焦點）不要淡到看不見——
+     原本 .68 倍 + .42 透明，實測在稀疏地區幾乎看不到，被誤認為「太小又模糊」。 */
+  .mk-dim{--k:.8;opacity:.55}
+  .mk-dim.mk-g{opacity:.7}
+  .leaflet-container[data-z="z12"] .mk{--d:18px}
+  .leaflet-container[data-z="z14"] .mk{--d:22px}
+  .leaflet-container[data-z="z16"] .mk{--d:26px;border-width:2.5px}
+  .leaflet-container[data-z="z18"] .mk{--d:30px;border-width:3px}
+  .leaflet-container[data-z="z16"] .mk-g{border-width:3px}
+  .leaflet-container[data-z="z18"] .mk-g{border-width:3.5px}
   .leaflet-control-attribution{font-size:10px;background:rgba(255,255,255,.78)}
   /* 底圖切換器（地圖左下角）：小、半透明、不搶視線 */
   .basemap-pick select{font:inherit;font-size:11px;padding:4px 6px;border-radius:7px;
@@ -1454,6 +1473,18 @@ function buildMap(){
   JLC.cluster = cluster;
 
   map.on('moveend zoomend', updateVisibleHint);
+  map.on('zoomend', syncMarkerScale);
+  syncMarkerScale();
+}
+
+/* ET-EDIT（2026-11-05）：依縮放級距切換標記大小（z12/z14/z16 三檔）。
+   只在 zoomend 時改一個 data 屬性，不動 marker 本身，成本近乎零。 */
+function syncMarkerScale(){
+  if(!JLC.map) return;
+  const z = JLC.map.getZoom();
+  const b = z >= 18 ? 'z18' : z >= 16 ? 'z16' : z >= 14 ? 'z14' : z >= 12 ? 'z12' : 'z0';
+  const el = JLC.map.getContainer();
+  if(el.dataset.z !== b) el.dataset.z = b;
 }
 
 /* ET-EDIT ── 底圖：**只用 OpenStreetMap**（使用者 2026-10-15 定案，移除 CARTO）
@@ -2028,19 +2059,16 @@ function renderMarkers(cams, inScope){
        （見 isLowConf 的說明：縣級座標誤差可達 260km，不能只標 guessed）。 */
     const guessed = isLowConf(c);                      // 位置待確認（空心圈＋半透明）
     const why = guessed ? lowWhy(c) : '';
-    const size = dim ? (guessed ? 9 : 11) : (guessed ? 12 : 15);
     // 待確認座標：空心圈樣式 + 半透明，與實測座標（實心）明確區隔，避免誤導為精確位置
-    const fill = guessed ? 'transparent' : dotColor(cls);
-    const stroke = guessed ? dotColor(cls) : '#fff';
+    // （尺寸與填色已改由 .mk / .mk-g / .mk-dim 控制，見上方 CSS）
     const m = L.marker([c.lat, c.lng], {
       icon: L.divIcon({
         className:'',
-        html:'<span style="display:block;width:'+size+'px;height:'+size+'px;border-radius:50%;'
-            +'background:'+fill+';border:'+(guessed?2.5:2)+'px solid '+stroke+';'
-            +'box-shadow:0 1px 5px rgba(10,25,45,.45)'
-            +(dim ? ';opacity:.42' : (guessed ? ';opacity:.8' : ''))+'"'
-            +(guessed ? ' title="'+why+'"' : '')+'></span>',
-        iconSize:L.point(size, size), iconAnchor:L.point(size/2, size/2), popupAnchor:L.point(0, -9)
+        // ET-EDIT（2026-11-05）：改用 CSS 類別 + 固定 26×26 錨點，
+        //   圓點大小由 .mk / [data-z] 控制，放大時不會位移也不糊。
+        html:'<span class="mk-wrap"><i class="mk'+(guessed?' mk-g':'')+(dim?' mk-dim':'')
+            +'" style="--c:'+dotColor(cls)+'"></i></span>',
+        iconSize:L.point(34, 34), iconAnchor:L.point(17, 17), popupAnchor:L.point(0, -15)
       }),
       title: (c.title || '') + (guessed ? '（' + why + '）' : ''), riseOnHover:true,
       zIndexOffset: dim ? 0 : (guessed ? 200 : 400)
