@@ -59,7 +59,7 @@ for(const lv of ['error', 'warn']){
     --ink:#0e1726; --ink-2:#243247; --muted:#64748b; --muted-2:#8595a8;
     --bg:#eef2f7; --card:rgba(255,255,255,.86); --line:rgba(15,30,50,.10);
     --accent:#d6455a; --accent-ink:#fff;
-    --live:#12b76a; --offline:#f04438; --unknown:#94a3b8; --blocked:#f79009;
+    --live:#12b76a; --offline:#f04438; --unknown:#94a3b8; --blocked:#f79009; --external:#5b7fdb;
     --shadow:0 10px 30px rgba(10,25,45,.14), 0 2px 6px rgba(10,25,45,.08);
     --radius:16px;
   }
@@ -236,6 +236,7 @@ for(const lv of ['error', 'warn']){
   .chip.offline{color:#912018;background:rgba(240,68,56,.12)}
   .chip.offline .dot{background:var(--offline)}
   .chip.unknown .dot{background:var(--unknown)}
+  .chip.external .dot{background:var(--external)}
   .chip.blocked{color:#93370d;background:rgba(247,144,9,.14)}
   .chip.blocked .dot{background:var(--blocked)}
 
@@ -289,6 +290,7 @@ for(const lv of ['error', 'warn']){
   .item .live-dot.live{background:var(--live);box-shadow:0 0 0 3px rgba(18,183,106,.18)}
   .item .live-dot.offline{background:var(--offline);box-shadow:0 0 0 3px rgba(240,68,56,.16)}
   .item .live-dot.blocked{background:var(--blocked);box-shadow:0 0 0 3px rgba(247,144,9,.16)}
+  .item .live-dot.external{background:var(--external);box-shadow:0 0 0 3px rgba(91,127,219,.18)}
   .item .body{min-width:0;flex:1}
   .item .t{font-size:13px;font-weight:600;line-height:1.4;word-break:break-word}
   .item .m{font-size:11px;color:var(--muted);margin-top:3px;display:flex;flex-wrap:wrap;gap:6px}
@@ -630,6 +632,7 @@ for(const lv of ['error', 'warn']){
       <span><i style="background:var(--live)"></i>直播中</span>
       <span><i style="background:var(--offline)"></i>未播</span>
       <span><i style="background:var(--unknown)"></i>未檢測</span>
+      <span><i style="background:var(--external)"></i>外部來源</span>
     </div>
     <span id="mapcount"></span>
   </div>
@@ -790,13 +793,14 @@ function dispTitle(c){
   return (c && (c.live_title || c.recovered_title)) || (c && c.title) || '(未命名)';
 }
 
-const LIVE_LABEL = { live:'直播中', offline:'目前未播', unknown:'未檢測' };
+const LIVE_LABEL = { live:'直播中', offline:'目前未播', unknown:'未檢測', external:'外部來源' };
 const LIVE_TIP   = {
   live:'偵測到正在直播（依前次檢測）',
   offline:'前次檢測時未在直播，可能為排程性／暫時離線',
-  unknown:'尚未檢測，狀態未知 — 不代表正在直播'
+  unknown:'尚未檢測，狀態未知 — 不代表正在直播',
+  external:'外部官網攝影機（非 YouTube），不納入直播檢測'
 };
-const LIVE_RANK  = { live:0, unknown:1, offline:2 };
+const LIVE_RANK  = { live:0, external:1, unknown:2, offline:3 };
 
 /* ── 啟動 ─────────────────────────────────────────────── */
 // ET-EDIT: 搜尋入口與重試在 fetch／buildMap 之前就可操作，不受啟動失敗影響。
@@ -1704,9 +1708,10 @@ function buildBasemapPicker(){
 
 /* ── 統計 ─────────────────────────────────────────────── */
 function tally(cams){
-  const t = {live:0, offline:0, unknown:0, blocked:0, tourism:0};
+  const t = {live:0, offline:0, unknown:0, external:0, blocked:0, tourism:0};
   for(const c of cams){
-    t[c.live === 'live' ? 'live' : c.live === 'offline' ? 'offline' : 'unknown']++;
+    t[c.live === 'live' ? 'live' : c.live === 'offline' ? 'offline'
+      : c.live === 'external' ? 'external' : 'unknown']++;
     if(!c.playable) t.blocked++;
     if(c.tourism) t.tourism++;
   }
@@ -1723,6 +1728,7 @@ function buildStats(feed){
     el('live','', '直播中', t.live) +
     el('offline','', '未播', t.offline) +
     el('unknown','','未檢測', t.unknown) +
+    (t.external ? el('external','','外部來源', t.external) : '') +
     (t.blocked ? el('blocked','','站外觀看', t.blocked) : '');
   $('#nTourism').textContent = '(' + t.tourism + ')';
   $('#nAll').textContent = '(' + cams.length + ')';
@@ -2427,7 +2433,11 @@ function visibleParent(marker){
 }
 
 /* ── 小工具 ───────────────────────────────────────────── */
-function liveClass(c){ return !c.playable ? 'blocked' : (c.live === 'live' || c.live === 'offline' ? c.live : 'unknown'); }
+function liveClass(c){
+  return !c.playable ? 'blocked'
+    : (c.live === 'live' || c.live === 'offline' || c.live === 'external') ? c.live
+    : 'unknown';
+}
 /* ET-EDIT（2026-10-15）── 管線「找不到位置」的各種長相
    使用者指示：「我希望管線找不到的，標示出來，到時候用 AI 去精修」。
 
@@ -2463,7 +2473,8 @@ function lowWhy(c){
   return '位置待確認';
 }
 function dotColor(cls){
-  return cls === 'live' ? '#12b76a' : cls === 'offline' ? '#f04438' : cls === 'blocked' ? '#f79009' : '#94a3b8';
+  return cls === 'live' ? '#12b76a' : cls === 'offline' ? '#f04438' : cls === 'blocked' ? '#f79009'
+    : cls === 'external' ? '#5b7fdb' : '#94a3b8';
 }
 let hintTimer = null;
 function updateVisibleHint(){
